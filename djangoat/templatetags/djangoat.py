@@ -8,14 +8,26 @@ register = template.Library()
 # FILTERS
 @register.filter
 def get(dictionary, key):
+    """
+    Retrieve the value of a dictionary entry with the given key.
+
+    In a Django template, to return a value using a static key we would just use `{{ DICT.KEY }}`. But if KEY is
+    variable, we need another solution. With this tag, we may instead write `{{ DICT|get:VARIABLE_KEY }}` to get the
+    desired value.
+
+    :param dictionary: a dict
+    :param key: a key in `dictionary` whose value we want to return
+    :return: the value corresponding to `key`
+    """
     return dictionary.get(key, None)
 
 
 
 @register.filter
 def data(key, arg=None):
-    """
-    Return the data associated with "key". To set this up, create a file somewhere in your project. In settings, set
+    """Return the data associated with "key".
+
+    To set this up, create a file somewhere in your project. In settings, set
     MY_DATA_PATH to the file's location. For example, if the file is in "server/data.py", then this path should be set
     to "server.data". We will import from this path to access data.
 
@@ -61,7 +73,8 @@ def data(key, arg=None):
 # TAGS
 @register.simple_tag(takes_context=True)
 def data(context, key, *args):
-    """
+    """Return the data associated with "key".
+
     This tag functions similarly to the "data" filter with two exceptions. Because it is a tag, it can accept as many
     arguments as required. When the data corresponding to "key" is a function, these arguments will be passed to that
     function, allowing for more varied results than the filter. Secondly, a tag can set a template variable using the

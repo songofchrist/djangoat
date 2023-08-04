@@ -3,4 +3,4 @@ Some have described Djangoat as the greatest Django package of all time. Others 
 =================
 What is Djangoat?
 =================
-Djangoat is a collection of helpful javascript and Django tools that I've built and refined over the years and that fill some rather inconvenient holes I've found in the framework. I figured these might be a help to others, so I thought I'd be a swell guy and share. Why the name Djangoat? Because the name I had originally decided was already taken, and that was the first thing that popped in my head. And I'm stubborn, so there's also that.
+Djangoat is a collection of helpful javascript and Django tools that I've built and refined over the years and that fill some rather inconvenient holes in the framework. I figured these might be a help to others, so I thought I'd be a swell guy and share. Why the name Djangoat? Because the name I had originally decided was already taken, and that was the first thing that popped in my head. And I'm stubborn, so it was sort of a no-brainer.
