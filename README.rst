@@ -1,1 +1,6 @@
-A library of helpful tools for javascript and Django.
+Some have described Djangoat as the greatest Django package of all time. Others are impressed by its stubborn pursuit of efficiency and innovation. Still others find it about as useful as a goat gnawing on grass, which, to be fair, will at least save you mowing the lawn. Wherever you find yourself on this spectrum, hopefully you'll find a little something to aid you in your quest (or mission or expedition or basically anything that sounds more fun than work). So tinker to your heart's delight, try not to butt heads with the code, and let me know your thoughts!
+
+=================
+What is Djangoat?
+=================
+Djangoat is a collection of helpful javascript and Django tools that I've built and refined over the years and that fill some rather inconvenient holes I've found in the framework. I figured these might be a help to others, so I thought I'd be a swell guy and share. Why the name Djangoat? Because the name I had originally decided was already taken, and that was the first thing that popped in my head. And I'm stubborn, so there's also that.
