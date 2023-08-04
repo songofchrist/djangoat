@@ -1,9 +1,9 @@
 # Read the Docs configuration file
 # See https://docs.readthedocs.io/en/stable/config-file/v2.html for details
 
-# Required
-version: 0.0.1
-
+## Required
+#version: 0.0.1
+#
 # Set the OS, Python version and other tools you might need
 build:
   os: ubuntu-22.04
