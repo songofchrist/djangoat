@@ -1,0 +1,1 @@
+DJANGOAT_DATA = {}

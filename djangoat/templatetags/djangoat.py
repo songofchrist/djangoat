@@ -1,5 +1,7 @@
 from django import template
 
+from .. import DJANGOAT_DATA
+
 register = template.Library()
 
 
@@ -23,47 +25,19 @@ def get(dictionary, key):
 
 
 @register.filter
-def data(key, arg=None):
-    """Return the data associated with "key".
+def dataf(key, arg=None):
+    """Retrieve the value of ``DJANGOAT_DATA[key]`` or, if the value is a callable, the result of the callable.
 
-    To set this up, create a file somewhere in your project. In settings, set
-    MY_DATA_PATH to the file's location. For example, if the file is in "server/data.py", then this path should be set
-    to "server.data". We will import from this path to access data.
+    The logic behind this filter is the same as that for the ``data`` tag. The only difference is that, because this
+    is a filter, it is limited to at most one argument. But also because it is a filter, it can be included directly
+    in for loops or chained directly to other filters, which may prove more convenient in certain cases. See the
+    ``data`` tag for more on the theory behind this filter.
 
-    Add to the file the following dictionary:
-
-        MY_DATA = {
-            'KEY1': [DATA_1],
-            'KEY2': [DATA_2],
-            . . .
-        }
-
-    The data will then be accessible in templates using a call like the following:
-
-        {{ 'KEY1'|data }}
-
-    Note that if a DATA value is callable, it will be called by the filter when accessed, and the result of the call
-    will be passed. This feature may be helpful, for example, if the data is somehow dynamic and needs to be
-    recalculated each time it's retrieved or if a queryset needs to be evaluated to get results.
-
-    As an example of usage, let's say we want to make a particular queryset accessible in all templates. We might
-    create a context processor and include it there, but this will not work in certain instances, such as calls to
-    render_to_string, where this context is not available. Instead, we can assign the queryset to "some_queryset" in
-    MY_DATA. This will make it available in all templates everywhere via the following call:
-
-        {{ 'some_queryset'|data }}
-
-    Note that querysets are cached, so we'll want to avoid doing anything when assigning these to MY_DATA that might
-    cause them to evaluate prematurely.
-
-    Also, see the "data" tag, which functions similarly but which allows for additional arguments for functions that
-    require more than one argument.
-
-    :param key: a key to data stored in MY_DATA at the path specified in MY_DATA_URL
-    :param arg: an argument to pass to a callable when retrieved data is a callable
-    :return: the data associated with "key"
+    :param key: a key in ``DJANGOAT_DATA``
+    :param arg: an argument to pass to ``DJANGOAT_DATA[key]`` when its value is callable
+    :return: the value of ``DJANGOAT_DATA[key]`` or, if the value is a callable, the result of the callable
     """
-    d = my_data.MY_DATA.get(key, None)
+    d = DJANGOAT_DATA[key]
     return (d(arg) if arg else d()) if callable(d) else d
 
 
@@ -71,41 +45,125 @@ def data(key, arg=None):
 
 # TAGS
 @register.simple_tag(takes_context=True)
-def context(context, key, *args):
-    """Inject the value corresponding to ``DJANGOAT_DATA[key]`` into the template context under the name ``key``.
+def data(context, key, *args):
+    """Retrieve the value of ``DJANGOAT_DATA[key]`` or, if the value is a callable, the result of the callable.
 
+    To understand the usefulness of this template tag, we first need to understand the problem it solves. Suppose we
+    use the queryset below in a number of different views throughout our site.
 
+    ..  code-block:: python
 
+        Book.objects.filter(type='novel')
 
+    We might handle this in a few ways:
 
+    1. Rebuild the queryset in every view that uses it and pass it in context.
+    2. Add the queryset to context processors to make it available in all templates.
+    3. Create a template tag specifically for this query, so it can be loaded as needed.
 
+    But each of these approaches comes with disadvantages:
 
-    This tag functions similarly to the "data" filter with two exceptions. Because it is a tag, it can accept as many
-    arguments as required. When the data corresponding to "key" is a function, these arguments will be passed to that
-    function, allowing for more varied results than the filter. Secondly, a tag can set a template variable using the
-    "as" keyword. Say a function returns an object like the following:
+    1. Including the queryset in every view means repetitive imports, potential for inconsistency from one view to the
+        next in more complex queries, and wasted processing when the queryset doesn't actually get used.
+    2. Including it in context processors circumvents the issues of the first approach but requires rebuilding the
+        queryset on every page load, whether it is used or not, and this adds up when one has hundreds of such queries.
+    3. Query-specific template tags address both of these issues, but this approach multiplies template tags
+        unnecessarily and requires us to remember where each tag is located and how to load it, making it less than
+        ideal.
 
-        {
-            'text': 'My Text',
-            'img': 'my_img.jpg'
-        }
+    The ``data`` template tag solves all of these issues by consolidating all such querysets into a single dict,
+    which is formed once upon restart and reused thereafter only when actually called via ``data`` within a
+    template. To make the queryset above universally accessible to all templates without the need to rebuild it on
+    every request, we might place the following in the file where the Book model is declared:
 
-    We could use the following to access these keys as follows:
+    ..  code-block:: python
 
-        {% data 'key' as result %}
-        Text: {{ result.text }}
-        Img: {{ result.img }}
+        from djangoat import DJANGOAT_DATA
 
-    :param key: a key to data stored in MY_DATA at the path specified in MY_DATA_URL
-    :param args: arguments to pass to a callable
-    :return: the data associated with "key"
+        class Book(models.Model):
+            . . .
+
+        DJANGOAT_DATA.update({
+            'novels': Book.objects.filter(type='novel')
+        })
+
+    To access this within a template, we might do one of the following:
+
+    ..  code-block:: python
+
+        {% load djangoat %}
+
+        {% data 'novels' %}
+        {% data 'novels' as good_books %}
+        {% data 'novels>' %}
+
+    The first of these will dump the queryset directly into the template as-is. The next will store the queryset in
+    the ``good_books`` variable. And the last will inject the queryset into context under the name of its key,
+    "novels".
+
+    But what if we have several authors stored in an ``authors`` variable and want to retrieve only novels by those
+    authors. In this case, we'd need to store the query as a lambda function, which will only evaluate when called.
+    This an any other queryset which would evaluate, such as those that call ``first()`` or ``count()``, **should be
+    couched in a lambda function**, so that they can be reused. For example, in the models file, we might update the
+    code as follows:
+
+    ..  code-block:: python
+
+        DJANGOAT_DATA.update({
+            'novels': Book.objects.filter(type='novel')
+            'novels_by_authors': lambda authors: Book.objects.filter(type='novel', authors__in=authors)
+        })
+
+    We would then used one of the following to get our results:
+
+    ..  code-block:: python
+
+        {% load djangoat %}
+
+        {% data 'novels_by_authors' authors %}
+        {% data 'novels_by_authors' authors as good_books %}
+        {% data 'novels_by_authors>' authors %}
+
+    This approach has all of the advantages of registering a separate template tag for every unique queryset or
+    callable, but with a lot less headache.
+
+    But what if we want to make use of one value in ``DJANGOAT_DATA`` within another? To do this, we'd do something
+    like the following:
+
+    ..  code-block:: python
+
+        DJANGOAT_DATA.update({
+            'novels': Book.objects.filter(type='novel')
+            'novels_by_authors': lambda authors: Book.objects.filter(type='novel', authors__in=authors)
+            'classic_novels': lambda: Book.objects.filter(type='novel', authors__in=DJANGOAT_DATA['classic_authors'])
+        })
+
+    Because the ``classic_novels`` queryset exists within a function, it makes no difference when
+    ``DJANGOAT_DATA['classic_authors']`` is added. As long as it is added somewhere along the line,
+    so that it will be available when needed, we'll be able to retrieve these novels without issue. Using this
+    method, we can effectively chain together various queries within ``DJANGOAT_DATA``, which may in certain cases
+    prove advantageous.
+
+    The ``data`` tag can accept as many arguments as necessary, but for functions with fewer than two arguments, you
+    may also use the ``dataf`` filter below, which operates on the same principle but uses filter syntax
+
+    In summary, this tag represents a way of thinking that results in a particular process. If process agrees with
+    you, the tag may save you a good deal of hassle.
+
+    :param context: the template context
+    :param key: a key in ``DJANGOAT_DATA``; if ``key`` ends in ">", then we'll inject the the corresponding value
+        into ``context`` under the same name as this key
+    :param args: arguments to pass to ``DJANGOAT_DATA[key]`` when its value is callable
+    :return: the value of ``DJANGOAT_DATA[key]`` or, if the value is a callable, the result of the callable or, if
+        ``key`` ends in ">", nothing, as the return value will be inject into ``context`` instead
     """
-    key = key.split('=')
-    if len(key) == 1:  # save result in context variable with the name KEY
-        var = key = key[0]
-    else:  # key has the form "VARIABLE_NAME=KEY"
-        var = key[0]
-        key = key[1]
-    d = my_data.MY_DATA.get(key, None)
-    context[var] = d(*args) if callable(d) else d
-    return context[var]
+    inject = False
+    if key[-1] == '>':
+        inject = True
+        key = key[:-1]
+    d = DJANGOAT_DATA[key]
+    v = d(*args) if callable(d) else d
+    if inject:
+        context[key] = v
+        return ''
+    return v
