@@ -10,7 +10,7 @@ register = template.Library()
 # FILTERS
 @register.filter
 def get(dictionary, key):
-    """Retrieve the value of a dictionary entry with the given key.
+    """Retrieves the value of a dictionary entry with the given key.
 
     In a Django template, to return a value using a static key we would normally use ``{{ DICT.KEY }}``. But if KEY is
     variable, this won't work. With this tag, we may instead use ``{{ DICT|get:VARIABLE_KEY }}`` to get the
@@ -26,7 +26,7 @@ def get(dictionary, key):
 
 @register.filter
 def dataf(key, arg=None):
-    """Retrieve the value of ``DJANGOAT_DATA[key]`` or, if the value is a callable, the result of the callable.
+    """Retrieves the value of ``DJANGOAT_DATA[key]`` or, if the value is a callable, the result of the callable.
 
     The logic behind this filter is the same as that for the ``data`` tag. The only difference is that, because this
     is a filter, it is limited to at most one argument. But also because it is a filter, it can be included directly
@@ -46,7 +46,7 @@ def dataf(key, arg=None):
 # TAGS
 @register.simple_tag(takes_context=True)
 def data(context, key, *args):
-    """Retrieve the value of ``DJANGOAT_DATA[key]`` or, if the value is a callable, the result of the callable.
+    """Retrieves the value of ``DJANGOAT_DATA[key]`` or, if the value is a callable, the result of the callable.
 
     To understand the usefulness of this template tag, we first need to understand the problem it solves. Suppose we
     use the queryset below in a number of different views throughout our site.
@@ -63,13 +63,9 @@ def data(context, key, *args):
 
     But each of these approaches comes with disadvantages:
 
-    1. Including the queryset in every view means repetitive imports, potential for inconsistency from one view to the
-        next in more complex queries, and wasted processing when the queryset doesn't actually get used.
-    2. Including it in context processors circumvents the issues of the first approach but requires rebuilding the
-        queryset on every page load, whether it is used or not, and this adds up when one has hundreds of such queries.
-    3. Query-specific template tags address both of these issues, but this approach multiplies template tags
-        unnecessarily and requires us to remember where each tag is located and how to load it, making it less than
-        ideal.
+    1. Including the queryset in every view means repetitive imports, potential for inconsistency from one view to the next in more complex queries, and wasted processing when the queryset doesn't actually get used.
+    2. Including it in context processors circumvents the issues of the first approach but requires rebuilding the queryset on every page load, whether it is used or not, and this adds up when one has hundreds of such queries.
+    3. Query-specific template tags address both of these issues, but this approach multiplies template tags unnecessarily and requires us to remember where each tag is located and how to load it, making it less than ideal.
 
     The ``data`` template tag solves all of these issues by consolidating all such querysets into a single dict,
     which is formed once upon restart and reused thereafter only when actually called via ``data`` within a
@@ -103,7 +99,7 @@ def data(context, key, *args):
 
     But what if we have several authors stored in an ``authors`` variable and want to retrieve only novels by those
     authors. In this case, we'd need to store the query as a lambda function, which will only evaluate when called.
-    This an any other queryset which would evaluate, such as those that call ``first()`` or ``count()``, **should be
+    This and any other queryset which would evaluate, such as those that call ``first()`` or ``count()``, **should be
     couched in a lambda function**, so that they can be reused. For example, in the models file, we might update the
     code as follows:
 
@@ -114,7 +110,7 @@ def data(context, key, *args):
             'novels_by_authors': lambda authors: Book.objects.filter(type='novel', authors__in=authors)
         })
 
-    We would then used one of the following to get our results:
+    We would then use one of the following to get our results:
 
     ..  code-block:: python
 
@@ -147,15 +143,15 @@ def data(context, key, *args):
     The ``data`` tag can accept as many arguments as necessary, but for functions with fewer than two arguments, you
     may also use the ``dataf`` filter below, which operates on the same principle but uses filter syntax
 
-    In summary, this tag represents a way of thinking that results in a particular process. If process agrees with
+    In summary, this tag represents a way of thinking that results in a particular process. If this process agrees with
     you, the tag may save you a good deal of hassle.
 
     :param context: the template context
-    :param key: a key in ``DJANGOAT_DATA``; if ``key`` ends in ">", then we'll inject the the corresponding value
-        into ``context`` under the same name as this key
+    :param key: a key in ``DJANGOAT_DATA``; if ``key`` ends in ">", then we'll inject the corresponding value into
+        ``context`` under the name of this key
     :param args: arguments to pass to ``DJANGOAT_DATA[key]`` when its value is callable
     :return: the value of ``DJANGOAT_DATA[key]`` or, if the value is a callable, the result of the callable or, if
-        ``key`` ends in ">", nothing, as the return value will be inject into ``context`` instead
+        ``key`` ends in ">", nothing, as the return value will be injected into ``context`` instead
     """
     inject = False
     if key[-1] == '>':
