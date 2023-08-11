@@ -5,7 +5,18 @@
 
 import os
 import sys
+import django
+
+from django.conf import settings
+
 sys.path.insert(0, os.path.abspath('../'))
+
+# Configure Django
+settings.configure(
+    SECRET_KEY='docs',
+    INSTALLED_APPS=['djangoat'],
+)
+django.setup()
 
 # Project information
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information

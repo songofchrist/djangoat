@@ -19,9 +19,10 @@ def dataf(key, arg=None):
     The logic behind this filter is the same as that for the ``data`` tag. The only difference is that, because this
     is a filter, it is limited to at most one argument. But also because it is a filter, it can be included directly
     in for loops or chained directly to other filters, which may prove more convenient in certain cases. See the
-    ``data`` tag for more on the theory behind this filter.
+    `data <#djangoat.templatetags.djangoat.data>`__ tag for more on the theory behind this filter.
 
     :param key: a key in ``DJANGOAT_DATA``
+    :type key: str
     :param arg: an argument to pass to ``DJANGOAT_DATA[key]`` when its value is callable
     :return: the value of ``DJANGOAT_DATA[key]`` or, if the value is a callable, the result of the callable
     """
@@ -39,6 +40,7 @@ def get(dictionary, key):
     desired value.
 
     :param dictionary: a dict
+    :type dictionary: dict
     :param key: a key in ``dictionary`` whose value we want to return
     :return: the value corresponding to ``key``
     """
@@ -48,10 +50,12 @@ def get(dictionary, key):
 
 @register.filter
 def mod(a, b):
-    """Return the result of ``a % b``
+    """Returns the result of ``a % b``.
 
     :param a: the number to be divided
+    :type a: int, float
     :param b: the number to divide by
+    :type b: int, float
     :return: the remainder of the division
     """
     try:
@@ -62,17 +66,17 @@ def mod(a, b):
 
 
 @register.filter
-def partition(lst, by=3):
+def partition(items, groups=3):
     """Returns a front-weighted list of lists.
 
     Suppose we have an alphabetized list of X items that we want to divide into Y columns, and we want to maintain
-    alphabetic ordering, such that items appear in order when reading from top to bottom and left to right. This tag
+    alphabetic ordering, such that items appear in order when reading from top to bottom, left to right. This tag
     will divide items in this list into sub-lists, which may then looped through to get our results.
 
     For example, if we have ``items = range(10)``, this tag will divide the list up into the following list of lists:
     ``[[0, 1, 2, 3], [4, 5, 6], [7, 8, 9]]``. We may then loop through these as follows to form our columns.
 
-    ..  code-block:: python
+    ..  code-block:: django
 
         <div class="row">
             {% for ilist in items|partition %}
@@ -82,59 +86,77 @@ def partition(lst, by=3):
             {% endfor %}
         </div>
 
-    :param lst: a list or object that can be converted to a list
-    :param by: how many groups to divide the list into (defaults to 3)
+    :param items: a list or object that can be converted to a list
+    :type items: list, tuple, queryset, etc.
+    :param groups: how many groups to divide the list into
+    :type groups: int
     :return: a front-weighted list of lists
     """
     r = []
-    lst = list(lst)
-    ll = len(lst)
+    items = list(items)
+    ll = len(items)
     s = 0
-    while by > 1:
-        e = s + math.ceil((ll - s) / by)
-        r.append(lst[s:e])
+    while groups > 1:
+        e = s + math.ceil((ll - s) / groups)
+        r.append(items[s:e])
         s = e
-        by -= 1
-    r.append(lst[s:])
+        groups -= 1
+    r.append(items[s:])
     return r
 
 
 
 @register.filter
-def seconds_to_units(s):
+def seconds_to_units(seconds):
     """Breaks seconds down into meaningful units.
 
     If an API gives us the duration of something in seconds, we'll likely want to display this in a form that will be
-    more meaningful to the user. This tag divides seconds into its component parts, so you can work with them.
+    more meaningful to the user. This tag divides seconds into its component parts as shown below:
 
-    :param s: seconds
-    :return: a dict of the form {"days": 0, "hours": 0, "minutes": 0, "seconds": 0}
+    ..  code-block:: python
+
+        {
+            "days": 0,
+            "hours": 0,
+            "minutes": 0,
+            "seconds": 0
+        }
+
+    :param seconds: total seconds to break into different units
+    :type s: int
+    :return: a dict of meaningful time units
     """
     m = h = d = 0
-    if s > 59:
-        m = int(s / 60)
-        s -= m * 60
+    if seconds > 59:
+        m = int(seconds / 60)
+        seconds -= m * 60
         if m > 59:
             h = int(m / 60)
             m -= h * 60
             if h > 23:
                 d = int(h / 24)
                 h -= d * 24
-    return {'days': d, 'hours': h, 'minutes': m, 'seconds': s}
+    return {'days': d, 'hours': h, 'minutes': m, 'seconds': seconds}
 
 
 
 
-# TAGS
+# SIMPLE TAGS
 @register.simple_tag
 def call_function(func, *args):
     """Calls a function that takes arguments.
 
-    ``func`` will need to be passed into context data to be called within a template. Alternatively, if we want a
-    function to be available globally, we may instead consider storing a function in ``DJANGOAT_DATA`` and calling
-    it via the ``data`` tag.
+    Assuming ``func`` has been included in template context, we can pass it arguments as follows:
+
+    ..  code-block:: django
+
+        {% call_function my_func arg1 arg2 arg3 %}
+
+    Alternatively, if we want a function to be available globally, we may instead consider storing a function in
+    ``DJANGOAT_DATA`` and calling it via the `data <#djangoat.templatetags.djangoat.data>`__ tag.
 
     :param func: the function we want to call
+    :type func: callable
     :param args: arguments to pass to ``func``
     :return: the return value of the function
     """
@@ -148,6 +170,7 @@ def call_method(obj, method, *args):
 
     :param obj: the object whose ``method`` we want to call
     :param method: the method to call
+    :type method: str
     :param args: arguments to pass to ``method``
     :return: the return value of the method
     """
@@ -178,7 +201,7 @@ def data(context, key, *args):
     2. Including it in context processors circumvents the issues of the first approach but requires rebuilding the queryset on every page load, whether it is used or not, and this adds up when one has hundreds of such queries.
     3. Query-specific template tags address both of these issues, but this approach multiplies template tags unnecessarily and requires us to remember where each tag is located and how to load it, making it less than ideal.
 
-    The ``data`` template tag solves all of these issues by consolidating all such querysets into a single dict,
+    This template tag solves all of these issues by consolidating all such querysets into a single dict,
     which is formed once upon restart and reused thereafter only when actually called via ``data`` within a
     template. To make the queryset above universally accessible to all templates without the need to rebuild it on
     every request, we might place the following in the file where the Book model is declared:
@@ -196,7 +219,7 @@ def data(context, key, *args):
 
     To access this within a template, we might do one of the following:
 
-    ..  code-block:: python
+    ..  code-block:: django
 
         {% load djangoat %}
 
@@ -223,7 +246,7 @@ def data(context, key, *args):
 
     We would then use one of the following to get our results:
 
-    ..  code-block:: python
+    ..  code-block:: django
 
         {% load djangoat %}
 
@@ -252,7 +275,8 @@ def data(context, key, *args):
     prove advantageous.
 
     The ``data`` tag can accept as many arguments as necessary, but for functions with fewer than two arguments, you
-    may also use the ``dataf`` filter below, which operates on the same principle but uses filter syntax.
+    may also use the `dataf <#djangoat.templatetags.djangoat.dataf>`__  filter below, which operates on the same
+    principle but uses filter syntax.
 
     As for how various querysets and functions make their way into the ``DJANGOAT_DATA``, this is a matter of
     preference. Adding them at the bottom of an app's ``models.py`` file saves importing models but may result in
@@ -263,8 +287,10 @@ def data(context, key, *args):
     you, the tag may save you a good deal of hassle.
 
     :param context: the template context
+    :type context: dict
     :param key: a key in ``DJANGOAT_DATA``; if ``key`` ends in ">", then we'll inject the corresponding value into
         ``context`` under the name of this key
+    :type key: str
     :param args: arguments to pass to ``DJANGOAT_DATA[key]`` when its value is callable
     :return: the value of ``DJANGOAT_DATA[key]`` or, if the value is a callable, the result of the callable or, if
         ``key`` ends in ">", nothing, as the return value will be injected into ``context`` instead
@@ -286,16 +312,13 @@ def data(context, key, *args):
 def pager(context,
           queryset,
           items_per_page=getattr(settings, 'DJANGOAT_PAGER_ITEMS_PER_PAGE', 20),
-          previous_page_text=getattr(settings, 'DJANGOAT_PAGER_PREVIOUS_PAGE_TEXT', '« Prev'),
-          next_page_text=getattr(settings, 'DJANGOAT_PAGER_NEXT_PAGE_TEXT', 'Next »'),
-          show_plus_or_minus=getattr(settings, 'DJANGOAT_PAGER_SHOW_PLUS_OR_MINUS', 3),
-          query=getattr(settings, 'DJANGOAT_PAGER_QUERY', 'page')):
+          plus_or_minus=getattr(settings, 'DJANGOAT_PAGER_SHOW_PLUS_OR_MINUS', 3)):
     """Returns a widget and queryset based on the current page.
 
     Suppose we have a queryset ``books``. To enable paging on these objects we would begin by invoking this template
     tag somewhere prior to the display of our book records.
 
-    ..  code-block:: python
+    ..  code-block:: django
 
         {% pager books %}
 
@@ -308,38 +331,42 @@ def pager(context,
     - ``pager_total``: the total number of records
     - ``pager``: a widget for navigating pages
 
-    We would then display out book records and the paging widget using something like the following:
+    We would then display out book records and the paging widget. A list page template might look something like the
+    following:
 
-    ..  code-block:: python
+    ..  code-block:: django
 
+        {% pager books %}
+        <h1>Books To Read</h1>
+        <hr>
         {% for book in pager_queryset %}
-            <p>{{ book.title }}</p>
+            <p><a href="{{ book.get_relative_url }}">{{ book.title }}</a></p>
         {% endfor %}
         <hr>
         {{ pager }}
 
-    Pagers may be set on an individual basis by passing arguments, and overall defaults may be set by setting the
-    following in Django settings:
+    The following may be added to Django's settings to alter this tag's default behavior:
 
-    - ``DJANGOAT_PAGER_ITEMS_PER_PAGE``
-    - ``DJANGOAT_PAGER_NEXT_PAGE_TEXT``
-    - ``DJANGOAT_PAGER_PREVIOUS_PAGE_TEXT``
-    - ``DJANGOAT_PAGER_QUERY``
-    - ``DJANGOAT_PAGER_SHOW_PLUS_OR_MINUS``
+    - ``DJANGOAT_PAGER_ITEMS_PER_PAGE`` (defaults to 20)
+    - ``DJANGOAT_PAGER_NEXT_PAGE_TEXT`` (defaults to "Next »")
+    - ``DJANGOAT_PAGER_PREVIOUS_PAGE_TEXT`` (defaults to "« Prev")
+    - ``DJANGOAT_PAGER_QUERY`` (defaults to "page")
+    - ``DJANGOAT_PAGER_SHOW_PLUS_OR_MINUS`` (defaults to 3)
 
-    Note that the pager relies on the current request object being present in the template context to retrieve the
+    Note that this tag relies on the current request object being present in the template context to retrieve the
     current page from the query string, so be sure to include this in context on any pages where pager is used.
 
     :param context: the template context
+    :type context: dict
     :param queryset: the queryset through which to page
-    :param items_per_page: items to show per page (defaults to 20)
-    :param previous_page_text: text to display for previous page (defaults to "« Prev")
-    :param next_page_text: text to display for next page (defaults to "Next »")
-    :param show_plus_or_minus: how many pages to show left and right of the active page (defaults to 3)
-    :param query: the query variable to indicate hte page (defaults to "page")
+    :param items_per_page: items to show per page
+    :type items_per_page: int
+    :param plus_or_minus: how many links to display on either side of the current page
+    :type plus_or_minus: int
     """
+    q = getattr(settings, 'DJANGOAT_PAGER_QUERY', 'page')
     try:
-        p = int(context['request'].GET.get(query, 1))
+        p = int(context['request'].GET.get(q, 1))
     except:
         p = 1
     if p < 1:
@@ -354,21 +381,21 @@ def pager(context,
     # Build the widget
     w = []
     if p > 1:
-        w.append(f'<a href="?{query}={p - 1}">{previous_page_text}</a>')
-    rl = p - show_plus_or_minus
-    ru = p + show_plus_or_minus
+        w.append(f'<a href="?{q}={p - 1}">{getattr(settings, "DJANGOAT_PAGER_PREVIOUS_PAGE_TEXT", "« Prev")}</a>')
+    rl = p - plus_or_minus
+    ru = p + plus_or_minus
     if rl > 1:
-        w.append(f'<a href="?{query}=1">1</a>')
+        w.append(f'<a href="?{q}=1">1</a>')
         if rl > 2:
             w.append(' ... ')
     for i in range(1 if rl < 0 else rl, (pt if ru > pt else ru) + 1):
-        w.append('<a href="javascript:void(0)" class="active">%d</a>' % p if i == p else '<a href="?{query}={i}">{i}</a>')
+        w.append('<a href="javascript:void(0)" class="active">%d</a>' % p if i == p else f'<a href="?{q}={i}">{i}</a>')
     if ru < pt - 1:
         w.append(' ... ')
     if ru < pt:
-        w.append(f'<a href="?{query}={pt}">{pt}</a>')
+        w.append(f'<a href="?{q}={pt}">{pt}</a>')
     if pt and p != pt:
-        w.append(f'<a href="?{query}={p + 1}">{next_page_text}</a>')
+        w.append(f'<a href="?{q}={p + 1}">{getattr(settings, "DJANGOAT_PAGER_NEXT_PAGE_TEXT", "Next »")}</a>')
     context.update({
         'pager_start': ps + 1,
         'pager_end': pe,
@@ -380,3 +407,78 @@ def pager(context,
         )),
     })
     return ''
+
+
+
+
+# TAGS
+@register.tag
+def cachefrag(parser, token):
+    """Create a ``CacheFrag`` record, if needed, and return cached content.
+
+    Functionally, this tag is no different from the built-in Django `template cache tag <https://docs.djangoproject.com/en/dev/topics/cache/#template-fragment-caching>`__.
+    Its first two arguments are the seconds to expiration and fragment name, and everything thereafter distinguishes
+    one fragment from the next in the cache.
+
+    Unlike the built-in cache tag, this tag records each unique fragment, along with its unique key, to the database,
+    so that it may be accessed and cleared on demand. For example, if the nav bar on a particular site needs updating,
+    rather than clearing the entire cache, we can use the ``CacheFrag`` admin to clear only that one fragment.
+
+    Also, because the fragment name and other distinguishing arguments are recorded in the database, we can query on
+    them to clear or delete all of a particular name or all containing a particular argument. This is especially
+    helpful when certain objects are updated in the database which affect cached content.
+
+    For example, if the links in the nav bar are updatable within the CMS, a user may decide to change the title or
+    url of a link or the order in which the links appear. Rather than waiting for the nav bar cache to expire, we can
+    query the associated fragment within the ``save_model`` admin method and clear it immediately, so that it can be
+    repopulated with the up-to-date links.
+
+    The following demonstrates how this code might be used:
+
+    ..  code-block:: django
+
+        {% cachefrag 12345 FRAG_NAME "token1" "token2" "token3" %}
+            Cached content
+        {% endcachefrag %}
+
+    For this call, a record will be created with the ``name`` value of FRAG_NAME and a ``tokens`` value of
+    :code:`["token1", "token2", "tokens3"]`. You may then use query on the ``tokens``
+    `JSONField <https://docs.djangoproject.com/en/dev/topics/db/queries/#querying-jsonfield>` as needed.
+
+    Also mention constants.time for the seconds arg.
+
+    """
+    return MyCacheNode(*original(parser, token, 'endcachefrag'))
+
+
+
+# @register.tag
+# def sitecachefrag(parser, token):
+#     """Create a ``CacheFrag`` record for the current site, if needed, and return cached content.
+#
+#     Like "mycache", but appends the current site id to vary_on and associates the CacheFragment with the current
+#     site.
+#     """
+#     return MyCacheNode(*original(parser, token, 'endsitecachefrag', settings.SITE_ID))
+#
+#
+#
+# @register.tag
+# def siteusercachefrag(parser, token):
+#     """Create a ``CacheFrag`` record for the current site and user, if needed, and return cached content.
+#
+#     Like "mysitecache", but expects USER_ID as the first vary_on argument and associates the CacheFragment with
+#     the current user.
+#     """
+#     return MyCacheNode(*original(parser, token, 'endsiteusercachefrag', settings.SITE_ID, True))
+#
+#
+#
+# @register.tag
+# def usercachefrag(parser, token):
+#     """Create a ``CacheFrag`` record for the current user, if needed, and return cached content.
+#
+#     Like "mysitecache", but expects USER_ID as the first vary_on argument and associates the CacheFragment with
+#     the current user.
+#     """
+#     return MyCacheNode(*original(parser, token, 'endusercachefrag', None, True))
