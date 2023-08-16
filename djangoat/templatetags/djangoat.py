@@ -6,7 +6,7 @@ from django.core.cache import InvalidCacheBackendError, caches
 from django.core.cache.utils import make_template_fragment_key
 from django.template import Library, Node, TemplateSyntaxError, VariableDoesNotExist
 
-from ..models import CacheFrag
+from ..models import CACHE_FRAG_KEYS, CacheFrag
 
 from .. import DJANGOAT_DATA, TIMES
 
@@ -14,8 +14,6 @@ register = Library()
 
 
 
-
-CACHE_FRAG_KEYS = {}  # store cache keys by CacheFrag name / site / user / token strings to save database hits for lookups
 
 # The following cache tags are based upon the original Django cache tag, located at the address below:
 # https://github.com/django/django/blob/main/django/templatetags/cache.py
@@ -33,31 +31,26 @@ class CacheFragNode(Node):
         try:
             expire_time = self.expire_time_var.resolve(context)
         except VariableDoesNotExist:
-            raise TemplateSyntaxError('"cachefrag" (or variant) tag got an unknown variable: %r' % self.expire_time_var.var)
-        if expire_time is not None:
-            print('TESTING seconds type', expire_time, type(expire_time))
-
-            if not isinstance(expire_time, int):
-                try:  # TIMES holds seconds for predefined periods (i.e. 1d, 2h, 4m, etc.)
-                    expire_time = TIMES[expire_time, int(expire_time)]
-                except (ValueError, TypeError):
-                    raise TemplateSyntaxError('"cachefrag" tag (or variant) got a non-integer timeout value: %r' % expire_time)
-            #
-            # if isinstance(expire_time, str):  # TIMES holds seconds for predefined periods (i.e. 1d, 2h, 4m, etc.)
-            #     expire_time = TIMES[expire_time]
-            # try:
-            #     expire_time = int(expire_time)
-            # except (ValueError, TypeError):
-            #     raise TemplateSyntaxError('"cachefrag" tag got a non-integer timeout value: %r' % expire_time)
+            raise TemplateSyntaxError('"cachefrag" (or variant) tag got an unknown variable: ' + repr(self.expire_time_var.var))
+        if expire_time is not None and isinstance(expire_time, str):
+            if expire_time.isnumeric():
+                expire_time = int(expire_time)
+            else:
+                et = 0
+                for t in expire_time.split('-'):
+                    et += TIMES.get(t, 0)  # TIMES holds seconds for predefined periods (i.e. 1d, 2h, 4m, etc.)
+                if not et:
+                    raise TemplateSyntaxError('"cachefrag" tag (or variant) got a non-integer timeout value not in TIMES: ' + repr(expire_time))
+                expire_time = et
         if self.cache_name:
             try:
                 cache_name = self.cache_name.resolve(context)
             except VariableDoesNotExist:
-                raise TemplateSyntaxError('"cachefrag" tag (or variant) got an unknown variable: %r' % self.cache_name.var)
+                raise TemplateSyntaxError('"cachefrag" tag (or variant) got an unknown variable: ' + repr(self.cache_name.var))
             try:
                 fragment_cache = caches[cache_name]
             except InvalidCacheBackendError:
-                raise TemplateSyntaxError('Invalid cache name specified for "cachefrag" tag (or variant): %r' % cache_name)
+                raise TemplateSyntaxError('Invalid cache name specified for "cachefrag" tag (or variant): ' + repr(cache_name))
         else:
             try:
                 fragment_cache = caches['template_fragments']
@@ -66,28 +59,24 @@ class CacheFragNode(Node):
         vary_on = [v.resolve(context) for v in self.vary_on]
 
         # Custom code to interact with CacheFrag
-        if self.site:
-            vary_on.append(self.site)
-        if self.user:
-            self.user = vary_on.pop(0)
-            vary_on.append(self.user)
-        vary_on_str = str(vary_on)[1:-1] if vary_on else ''
-        str_key = self.fragment_name + '|' + vary_on_str
-        cache_key = settings.MY_CACHE_KEYS.get(str_key, None)
+        user = context['request'].user.id or '' if self.user else ''
+        site = self.site or ''
+        key = f'{self.fragment_name}|{user}|{site}|{vary_on}'
+        cache_key = CACHE_FRAG_KEYS.get(key, None)
         if not cache_key:  # make sure this is in the db, but store in keys to prevent unnecessary calls
-            cf, created = CacheFrag.objects.get_or_create(key=make_template_fragment_key(self.fragment_name, vary_on))
+            cf, created = CacheFrag.objects.get_or_create(key=make_template_fragment_key(self.fragment_name, [user, site] + vary_on))
             if created:
                 cf.name = self.fragment_name
+                if user:
+                    cf.user_id = user
+                if site:
+                    cf.site_id = site
                 if vary_on:
-                    cf.extra = vary_on_str
-                if self.site:
-                    cf.site_id = self.site
-                if self.user:
-                    cf.user_id = self.user
+                    cf.tokens = vary_on
                 cf.save()
-            settings.MY_CACHE_KEYS[str_key] = cache_key = cf.key
+            CACHE_FRAG_KEYS[key] = cache_key = cf.key  # save, so we don't have to hit the database
         if settings.DEBUG:
-            print('CACHE FRAG %s (expiry %ds)'% (str_key, expire_time))
+            print(f'CACHE FRAG "{key}" (expires in {seconds_to_units(expire_time)})')
 
         # Resume original code
         value = fragment_cache.get(cache_key)
@@ -569,8 +558,9 @@ def cachefrag(parser, token):
             I will expire in 173 days.
         {% endcachefrag %}
 
-    If you need a value that is not available by default, simply update the TIMES dict, and your custom time
-    will become available for use with this tag.
+    You may also use time combinations like "1d-12h" for 1 day and 12 hours or "2h-30m" for 2 hours and 30 minutes.
+    This ability to combine times should serve most all your needs, but should you need a value that is not available
+    by default, simply update the TIMES dict, and your custom time will become available for use with this tag.
     """
     return get_cache_frag_node(parser, token, 'endcachefrag')
 
@@ -601,31 +591,6 @@ def sitecachefrag(parser, token):
 
 
 @register.tag
-def usersitecachefrag(parser, token):
-    """Create a ``CacheFrag`` record for the current site and user, if needed, and return cached content.
-
-    This works the same as the `cachefrag tag <#djangoat.templatetags.djangoat.cachefrag>`__ but automatically
-    accounts for the unique ids of both the current site and user without either having to be entered as a token.
-    The following two blocks, for example, would be functionally identical.
-
-    ..  code-block:: django
-
-        {% cachefrag 12345 FRAG_NAME SITE_ID USER_ID %}
-            Site-specific, user-specific content
-        {% endcachefrag %}
-
-        {% usersitecachefrag 12345 FRAG_NAME %}
-            Site-specific, user-specific content
-        {% endusersitecachefrag %}
-
-    Note that this requires Django's Sites framework to be set up with a ``SITE_ID`` in settings and a ``request``
-    template context variable that contains the request object, from which we'll determine the user.
-    """
-    return get_cache_frag_node(parser, token, 'endusersitecachefrag', settings.SITE_ID, True)
-
-
-
-@register.tag
 def usercachefrag(parser, token):
     """Create a ``CacheFrag`` record for the current user, if needed, and return cached content.
 
@@ -647,3 +612,28 @@ def usercachefrag(parser, token):
     we'll determine the user.
     """
     return get_cache_frag_node(parser, token, 'endusercachefrag', None, True)
+
+
+
+@register.tag
+def usersitecachefrag(parser, token):
+    """Create a ``CacheFrag`` record for the current site and user, if needed, and return cached content.
+
+    This works the same as the `cachefrag tag <#djangoat.templatetags.djangoat.cachefrag>`__ but automatically
+    accounts for the unique ids of both the current site and user without either having to be entered as a token.
+    The following two blocks, for example, would be functionally identical.
+
+    ..  code-block:: django
+
+        {% cachefrag 12345 FRAG_NAME SITE_ID USER_ID %}
+            Site-specific, user-specific content
+        {% endcachefrag %}
+
+        {% usersitecachefrag 12345 FRAG_NAME %}
+            Site-specific, user-specific content
+        {% endusersitecachefrag %}
+
+    Note that this requires Django's Sites framework to be set up with a ``SITE_ID`` in settings and a ``request``
+    template context variable that contains the request object, from which we'll determine the user.
+    """
+    return get_cache_frag_node(parser, token, 'endusersitecachefrag', settings.SITE_ID, True)
