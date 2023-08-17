@@ -6,6 +6,7 @@ Welcome to Djangoat's documentation!
    :caption: Contents:
 
    installation
+   models
    templatetags
 
 Indices and tables

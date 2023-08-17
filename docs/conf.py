@@ -14,7 +14,10 @@ sys.path.insert(0, os.path.abspath('../'))
 # Configure Django
 settings.configure(
     SECRET_KEY='docs',
-    INSTALLED_APPS=['djangoat'],
+    INSTALLED_APPS=[
+        'django.contrib.sessions',
+        'djangoat'
+    ],
 )
 django.setup()
 
