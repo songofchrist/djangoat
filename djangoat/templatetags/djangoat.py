@@ -115,7 +115,7 @@ def get_cache_frag_node(parser, token, endcache, site=None, user=False):
 # FILTERS
 @register.filter
 def dataf(key, arg=None):
-    """Retrieves the value of ``DJANGOAT_DATA[key]`` or, if the value is a callable, the result of the callable.
+    """Retrieves the value of :python:`DJANGOAT_DATA[key]` or, if the value is a callable, the result of the callable.
 
     The logic behind this filter is the same as that for the ``data`` tag. The only difference is that, because this
     is a filter, it is limited to at most one argument. But also because it is a filter, it can be included directly
@@ -124,8 +124,8 @@ def dataf(key, arg=None):
 
     :param key: a key in ``DJANGOAT_DATA``
     :type key: str
-    :param arg: an argument to pass to ``DJANGOAT_DATA[key]`` when its value is callable
-    :return: the value of ``DJANGOAT_DATA[key]`` or, if the value is a callable, the result of the callable
+    :param arg: an argument to pass to :python:`DJANGOAT_DATA[key]` when its value is callable
+    :return: the value of :python:`DJANGOAT_DATA[key]` or, if the value is a callable, the result of the callable
     """
     d = DJANGOAT_DATA[key]
     return (d(arg) if arg else d()) if callable(d) else d
@@ -136,9 +136,9 @@ def dataf(key, arg=None):
 def get(dictionary, key):
     """Retrieves the value of a dictionary entry with the given key.
 
-    In a Django template, to return a value using a static key we would normally use ``{{ DICT.KEY }}``. But if KEY is
-    variable, this won't work. With this tag, we may instead use ``{{ DICT|get:VARIABLE_KEY }}`` to get the
-    desired value.
+    In a Django template, to return a value using a static key we would normally use :django:`{{ DICT.KEY }}`. But
+    if KEY is variable, this won't work. With this tag, we may instead use :django:`{{ DICT|get:VARIABLE_KEY }}` to get
+    the desired value.
 
     :param dictionary: a dict
     :type dictionary: dict
@@ -174,8 +174,9 @@ def partition(items, groups=3):
     alphabetic ordering, such that items appear in order when reading from top to bottom, left to right. This tag
     will divide items in this list into sub-lists, which may then looped through to get our results.
 
-    For example, if we have ``items = range(10)``, this tag will divide the list up into the following list of lists:
-    ``[[0, 1, 2, 3], [4, 5, 6], [7, 8, 9]]``. We may then loop through these as follows to form our columns.
+    For example, if we have :python:`items = range(10)`, this tag will divide the list up into the following list of
+    lists: :python:`[[0, 1, 2, 3], [4, 5, 6], [7, 8, 9]]`. We may then loop through these as follows to form our
+    columns.
 
     ..  code-block:: django
 
@@ -254,7 +255,7 @@ def call_function(func, *args):
         {% call_function my_func arg1 arg2 arg3 %}
 
     Alternatively, if we want a function to be available globally, we may instead consider storing a function in
-    ``DJANGOAT_DATA`` and calling it via the `data <#djangoat.templatetags.djangoat.data>`__ tag.
+    ``DJANGOAT_DATA`` and calling it via the `data tag`_.
 
     :param func: the function we want to call
     :type func: callable
@@ -281,7 +282,7 @@ def call_method(obj, method, *args):
 
 @register.simple_tag(takes_context=True)
 def data(context, key, *args):
-    """Retrieves the value of ``DJANGOAT_DATA[key]`` or, if the value is a callable, the result of the callable.
+    """Retrieves the value of :python:`DJANGOAT_DATA[key]` or, if the value is a callable, the result of the callable.
 
     To understand the usefulness of this template tag, we first need to understand the problem it solves. Suppose we
     use the queryset below in a number of different views throughout our site.
@@ -302,10 +303,10 @@ def data(context, key, *args):
     2. Including it in context processors circumvents the issues of the first approach but requires rebuilding the queryset on every page load, whether it is used or not, and this adds up when one has hundreds of such queries.
     3. Query-specific template tags address both of these issues, but this approach multiplies template tags unnecessarily and requires us to remember where each tag is located and how to load it, making it less than ideal.
 
-    This template tag solves all of these issues by consolidating all such querysets into a single dict,
-    which is formed once upon restart and reused thereafter only when actually called via ``data`` within a
-    template. To make the queryset above universally accessible to all templates without the need to rebuild it on
-    every request, we might place the following in the file where the Book model is declared:
+    This template tag solves all of these issues by consolidating all such querysets into a single dict, which is
+    formed once upon restart and reused thereafter only when actually called by this tag. To make the queryset above
+    universally accessible to all templates without the need to rebuild it on every request, we might place the
+    following in the file where the Book model is declared:
 
     ..  code-block:: python
 
@@ -370,14 +371,13 @@ def data(context, key, *args):
         })
 
     Because the ``classic_novels`` queryset exists within a function, it makes no difference when
-    ``DJANGOAT_DATA['classic_authors']`` is added. As long as it is added somewhere along the line,
+    :python:`DJANGOAT_DATA['classic_authors']` is added. As long as it is added somewhere along the line,
     so that it will be available when needed, we'll be able to retrieve these novels without issue. Using this
     method, we can effectively chain together various queries within ``DJANGOAT_DATA``, which may in certain cases
     prove advantageous.
 
-    The ``data`` tag can accept as many arguments as necessary, but for functions with fewer than two arguments, you
-    may also use the `dataf <#djangoat.templatetags.djangoat.dataf>`__  filter below, which operates on the same
-    principle but uses filter syntax.
+    The `data tag`_ can accept as many arguments as necessary, but for functions with fewer than two arguments, you
+    may also use the `dataf`_  filter below, which operates on the same principle but uses filter syntax.
 
     As for how various querysets and functions make their way into the ``DJANGOAT_DATA``, this is a matter of
     preference. Adding them at the bottom of an app's ``models.py`` file saves importing models but may result in
@@ -393,8 +393,8 @@ def data(context, key, *args):
         ``context`` under the name of this key
     :type key: str
     :param args: arguments to pass to ``DJANGOAT_DATA[key]`` when its value is callable
-    :return: the value of ``DJANGOAT_DATA[key]`` or, if the value is a callable, the result of the callable or, if
-        ``key`` ends in ">", nothing, as the return value will be injected into ``context`` instead
+    :return: the value of :python:`DJANGOAT_DATA[key]` or, if the value is a callable, the result of the callable or,
+        if ``key`` ends in ">", nothing, as the return value will be injected into ``context`` instead
     """
     inject = False
     if key[-1] == '>':
@@ -510,12 +510,13 @@ def pager(context,
     return ''
 
 
-
+"""
+"""
 
 # TAGS
 @register.tag
 def cachefrag(parser, token):
-    """Create a ``CacheFrag`` record, if needed, and return cached content.
+    """Creates a `CacheFrag`_ record, if needed, and returns cached content.
 
     Functionally, this tag is no different from the built-in Django `template cache tag <https://docs.djangoproject.com/en/dev/topics/cache/#template-fragment-caching>`__.
     Its first two arguments are the seconds to expiration and fragment name, and everything thereafter distinguishes
@@ -523,7 +524,8 @@ def cachefrag(parser, token):
 
     Unlike the built-in cache tag, this tag records each unique fragment, along with its unique key, in the database,
     so that it can be accessed and cleared on demand. For example, if the nav bar on a particular site needs updating,
-    rather than clearing the entire cache, we can use the ``CacheFrag`` admin to clear only that one fragment.
+    rather than clearing the entire cache, we can use the `CacheFrag`_ admin
+    to clear only that one fragment.
 
     Also, because the fragment name and other distinguishing arguments are recorded in the database, we can query on
     them to clear or delete all fragments having a particular name or containing a particular argument. This is
@@ -542,13 +544,12 @@ def cachefrag(parser, token):
             Cached content
         {% endcachefrag %}
 
-    For this call, a ``CacheFrag`` record will be created with the ``name`` FRAG_NAME and a ``tokens`` value of
-    :code:`["token1", "token2", "tokens3"]`. The tokens will be stored in a ``tokens``
-    `JSONField <https://docs.djangoproject.com/en/dev/topics/db/queries/#querying-jsonfield>`__, so that it can
+    For this call, a `CacheFrag`_ record will be created with the ``name`` FRAG_NAME and a ``tokens`` value of
+    :python:`["token1", "token2", "tokens3"]`. The tokens will be stored in a ``tokens`` `JSONField`_, so that it can
     easily be queried.
 
-    Also worth noting is that the values of the Djangoat's TIMES dict are automatically available in the seconds slot
-    of this tag. We do not immediately know how many seconds are in 6 minutes or 6 hours or 6 days, so rather than
+    Also worth noting is that the values of the Djangoat's ``TIMES`` dict are automatically available in the seconds
+    slot of this tag. We do not immediately know how many seconds are in 6 minutes or 6 hours or 6 days, so rather than
     having to do the math each time we want to use one of these in the tag and then forgetting what the number means
     next time we encounter it, we can simply pass in "6m" or "6h" or "6d" instead. Consider the following:
 
@@ -560,7 +561,7 @@ def cachefrag(parser, token):
 
     You may also use time combinations like "1d-12h" for 1 day and 12 hours or "2h-30m" for 2 hours and 30 minutes.
     This ability to combine times should serve most all your needs, but should you need a value that is not available
-    by default, simply update the TIMES dict, and your custom time will become available for use with this tag.
+    by default, simply update the ``TIMES`` dict, and your custom time will become available for use with this tag.
     """
     return get_cache_frag_node(parser, token, 'endcachefrag')
 
@@ -568,9 +569,9 @@ def cachefrag(parser, token):
 
 @register.tag
 def sitecachefrag(parser, token):
-    """Create a ``CacheFrag`` record for the current site, if needed, and return cached content.
+    """Create a `CacheFrag`_ record for the current site, if needed, and return cached content.
 
-    This works the same as the `cachefrag tag <#djangoat.templatetags.djangoat.cachefrag>`__ but automatically
+    This works the same as the `cachefrag tag`_ but automatically
     accounts for the unique id of the current site without it having to be entered as a token. The following two
     blocks, for example, would be functionally identical.
 
@@ -592,9 +593,9 @@ def sitecachefrag(parser, token):
 
 @register.tag
 def usercachefrag(parser, token):
-    """Create a ``CacheFrag`` record for the current user, if needed, and return cached content.
+    """Create a `CacheFrag`_ record for the current user, if needed, and return cached content.
 
-    This works the same as the `cachefrag tag <#djangoat.templatetags.djangoat.cachefrag>`__ but automatically
+    This works the same as the `cachefrag tag`_ but automatically
     accounts for the unique id of the current user without it having to be entered as a token. The following two
     blocks, for example, would be functionally identical.
 
@@ -617,9 +618,9 @@ def usercachefrag(parser, token):
 
 @register.tag
 def usersitecachefrag(parser, token):
-    """Create a ``CacheFrag`` record for the current site and user, if needed, and return cached content.
+    """Create a `CacheFrag`_ record for the current site and user, if needed, and return cached content.
 
-    This works the same as the `cachefrag tag <#djangoat.templatetags.djangoat.cachefrag>`__ but automatically
+    This works the same as the `cachefrag tag`_ but automatically
     accounts for the unique ids of both the current site and user without either having to be entered as a token.
     The following two blocks, for example, would be functionally identical.
 

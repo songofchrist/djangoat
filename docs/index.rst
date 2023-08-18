@@ -7,7 +7,9 @@ Welcome to Djangoat's documentation!
 
    installation
    models
+   utils
    templatetags
+
 
 Indices and tables
 ==================

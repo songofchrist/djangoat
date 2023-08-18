@@ -1,3 +1,10 @@
+.. role:: python(code)
+   :language: python
+.. role:: django(code)
+   :language: django
+
+.. _get_csv_content tag: #djangoat.utils.get_csv_content
+
 Utils
 =====
 
