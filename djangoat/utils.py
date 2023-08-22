@@ -8,7 +8,7 @@ import json
 # import os
 # import requests
 # import time
-# import types
+import types
 # # import xlwt
 #
 # # from easy_thumbnails.files import get_thumbnailer
@@ -23,7 +23,8 @@ from io import BytesIO, StringIO
 # from django.core.files import File
 # from django.contrib import admin
 # from django.contrib.redirects.models import Redirect
-# from django.db.models import F
+from django.contrib.postgres.aggregates import StringAgg
+from django.db.models import F
 # from django.db.models.fields.files import ImageFieldFile
 from django.http.response import HttpResponse
 # from django.template import loader
@@ -235,55 +236,106 @@ def get_xlsx_file(filename, rows, keys=None, add_headers=True):
 
 
 
-def get_csv_rows_from_queryset(queryset, values, prettify_headers=False, derived_fields=None, dynamic_columns=None):
+def get_csv_rows_from_queryset(queryset, fields, prettify_headers=False, derived_fields=None, dynamic_columns=None, agg_delimiter=', '):
     """Returns a list of lists suitable for building a CSV file or spreadsheet.
 
+    "Field" names used to populate each column are specified in ``fields`` and may take one of the following forms:
+
+    ..  code-block:: python
+
+        (
+            'field',
+            'method',
+            'choice_field',
+            'rep__user__name'
+            '_annotated__avg',
+            '_derived',
+            ('field', 'Field With Custom Title'),
+            ('method', 'Method With Custom Title')
+            ('choice_field', 'Choice Field', {V1: TEXT1, V2: TEXT2 . . .}),
+            ('rep__user__name', 'Auto Annotated User Name'),
+            ('_annotated__avg', 'Annotated Average'),
+            ('_derived', 'Programmatically Derived')
+        )
+
+    In general, all fields are specified in one of two ways:
+
+    1. Provide only the field name
+    2. Provide a tuple of the form :python:`("field_name", "Column Display")`
+
+    The field name in this scheme may be any one of the following:
+
+    - A field or method on a queryset instance
+    - A field on a related model, specified using standard join notation
+    - An annotated field
+    - A derived field
+
+    When ``field`` is a standard field or method, simply specify the field or method, and the resultant value for
+    each record in the queryset will be used to populate the associated column. For choice fields, when the value
+    retrieved is not display-worthy (e.g. an integer), a per-value display dict may be passed as the third member of
+    a tuple. This will result in values being replaced by associated display values when provided.
+
+    By default, fields that contain a "__" in them will automatically be retrieved via annotation. For example, for
+    "rep__user__name", we would perform the following annotation:
+
+    ..  code-block:: python
+
+        queryset = queryset.annotate(rep__user__name=F('rep__user__name'))
+
+    Using this approach, we can represent any ForeignKey field in our output. If we have a ManyToManyField and want
+    to auto-annotate it as well, we can indicate this by adding a "+" sign at the end of the field name. For example,
+    for "rep__tasks__title" (where each rep can have multiple tasks), we would pass "rep__tasks__title+". This will
+    result in the following:
+
+    ..  code-block:: python
+
+        queryset = queryset.annotate(rep__tasks__title=StringAgg("rep__tasks__title", ", ", distinct=True))
+
+    When auto-annotation proves insufficient, we may manually create custom annotated fields by prepending a "_"
+    character to the beginning of a field. For example, if we wanted a different delimiter in the above annotation,
+    we might do the following:
+
+    ..  code-block:: python
+
+        queryset = queryset.annotate(_tasks=StringAgg("rep__tasks__title", "|", distinct=True))
+        get_csv_rows_from_queryset(queryset, ["_tasks" . . .] . . .)
+
+    Beginning a field "_" will disable auto-annotation, necessitating a manual definition.
+
+
+
+
+
+    Note that ManyToMany fields will require
+    a custom annotation that joins resultant values together.
+
+
+
+    . Custom annotations containing "__" must begin with an underscore, as in "_annotated__avg", so that they are not inadvertently auto annotated. Alternatively, for more complex operations, the "values" argument may take the form (FUNCTION, HEADERS), where FUNCTION returns a row of data and HEADERS the header row. For example, you might use something like this:
+
+
+
+    table to retrieve via "annotate", or a custom annotation. Whenever "__" appears in a field, an annotation by
+    this field name will automatically be added to the queryset. For example, for "rep__user__name", we would do
+    the following:
+
+        queryset = queryset.annotate(rep__user__name=F('rep__user__name'))
+
+    Thus any ForeignKey field can be represented in the output. ManyToMany fields will likely require a custom
+    annotation that joins resultant values together (i.e. via StringAgg). Custom annotations containing "__" must
+    begin with an underscore, as in "_annotated__avg", so that they are not inadvertently auto annotated.
+    Alternatively, for more complex operations, the "values" argument may take the form (FUNCTION, HEADERS), where
+    FUNCTION returns a row of data and HEADERS the header row. For example, you might use something like this:
+
+        (lambda o: [o.name, o.company.name, o.company.sites()], ['User', 'Company', 'Company Sites'])
+
+    Make sure to use a "select_related" on the queryset when referencing related models to increase efficiency.
+    Also note the dict provided above as the third value in the "choice_field" tuple. When provided, this will be
+    used to map the result value, which may be a number or textual key, to a more readable display value. For
+    dynamic displays, use "derived_fields".
+
     :param queryset: the queryset from which to retrieve ``values``
-    :param values: a tuple or list of the following form:
-
-        ..  code-block:: python
-
-            (
-                'field',
-                'choice_field',
-                'method',
-                'rep__user__name'
-                '_annotated__avg',
-                '_derived',
-                ('field', 'Field With Custom Title'),
-                ('choice_field', 'Choice Field', {V1: TEXT1, V2: TEXT2 . . .}),
-                ('method', 'Method With Custom Title')
-                ('rep__user__name', 'Auto Annotated User Name'),
-                ('_annotated__avg', 'Annotated Average'),
-                ('_derived', 'Programmatically Derived')
-            )
-
-
-        Field names in this scheme may be any one of the following:
-
-        - A field or method on a queryset instance
-        - A field on a related model
-        - An annotated field
-        - A derived field
-
-        table to retrieve via "annotate", or a custom annotation. Whenever "__" appears in a field, an annotation by
-        this field name will automatically be added to the queryset. For example, for "rep__user__name", we would do
-        the following:
-
-            queryset = queryset.annotate(rep__user__name=F('rep__user__name'))
-
-        Thus any ForeignKey field can be represented in the output. ManyToMany fields will likely require a custom
-        annotation that joins resultant values together (i.e. via StringAgg). Custom annotations containing "__" must
-        begin with an underscore, as in "_annotated__avg", so that they are not inadvertently auto annotated.
-        Alternatively, for more complex operations, the "values" argument may take the form (FUNCTION, HEADERS), where
-        FUNCTION returns a row of data and HEADERS the header row. For example, you might use something like this:
-
-            (lambda o: [o.name, o.company.name, o.company.sites()], ['User', 'Company', 'Company Sites'])
-
-        Make sure to use a "select_related" on the queryset when referencing related models to increase efficiency.
-        Also note the dict provided above as the third value in the "choice_field" tuple. When provided, this will be
-        used to map the result value, which may be a number or textual key, to a more readable display value. For
-        dynamic displays, use "derived_fields".
+    :param fields: a tuple or list of fields or pseudo-fields with whose values to populate columns
     :param prettify_headers: when a header is not explicitly provided, set this to True to title case the field, split
         the field by "__" and take the last string, and replace any remaining underscores with spaces.
     :param derived_fields: a function that takes "queryset" and returns a dictionary of derived field results for use
@@ -318,6 +370,7 @@ def get_csv_rows_from_queryset(queryset, values, prettify_headers=False, derived
 
         This is primarily intended as a means for including dynamic columns that may differ from one queryset to the
         next.
+    :param agg_delimiter: the delimiter to use when aggregating many-to-many values into a string
     :return: a list of lists, ready to be fed into "get_csv_content" or anything that makes use of it
     """
     if not queryset:
@@ -326,24 +379,32 @@ def get_csv_rows_from_queryset(queryset, values, prettify_headers=False, derived
         dch, dcr = dynamic_columns(queryset)  # dynamic header list / per-primary-key value lists
     else:
         dch, dcr = [], {}
-    f = values[0]
+    f = fields[0]
     if isinstance(f, types.FunctionType):  # for (FUNCTION, HEADERS), use the passed function to derive each row
-        headers, rows = values[1], [f(d) + dcr.get(d.pk, []) for d in queryset]
+        headers, rows = fields[1], [f(d) + dcr.get(d.pk, []) for d in queryset]
     else:
         df = derived_fields(queryset) if derived_fields else {}
-        fields = []
         headers = []
         maps = {}
-        for v in values:
-            if isinstance(v, str):
-                fields.append(v)
-                headers.append(v.split('__')[-1].replace('_', ' ').title().lstrip() if prettify_headers else v)
+        aafields = {}
+        for i, f in enumerate(fields):  # derive headers
+            if isinstance(f, str):
+                headers.append(f.split('__')[-1].replace('_', ' ').title().lstrip() if prettify_headers else f)
             else:
-                fields.append(v[0])
-                headers.append(v[1])
-                if len(v) > 2:  # mapping was included for this field
-                    maps[v[0]] = dict(v[2])
-        queryset = queryset.annotate(**{f: F(f) for f in fields if f[0] != '_' and '__' in f})
+                fields[i] = f[0]
+                headers.append(f[1])
+                if len(f) > 2:  # mapping was included for this field
+                    maps[f[0]] = dict(f[2])
+        for i, f in enumerate(fields):  # check for fields needing annotation
+            if f[0] != '_' and '__' in f:
+                if f[-1] == '+':  # many-to-many annotation
+                    f = f[:-1]
+                    fields[i] = f
+                    aafields[f] = StringAgg(f, agg_delimiter, distinct=True),
+                else:  # foreign key annotation
+                    aafields[f] = F(f)
+        if aafields:  # add auto-annotations
+            queryset = queryset.annotate(**aafields)
         rows = []
         qs = list(queryset)  # need a list to quickly test for dict / instance below
         if isinstance(qs[0], dict):  # results are in dict form as with "values" / "annotate"
