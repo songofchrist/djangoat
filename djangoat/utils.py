@@ -127,7 +127,7 @@ def get_csv_file(filename, rows, dialect=csv.excel, keys=None, add_headers=True)
     """Returns a CSV file download response.
 
     :param filename: the name of the CSV file, without the ".csv" extension
-    :param rows: see the `get_csv_content tag`_ for acceptable formats
+    :param rows: see `get_csv_content`_ for acceptable formats
     :param dialect: the dialect in which to write the CSV
     :param keys: when ``rows`` is a list of dicts or OrderedDicts, the keys of the values to include in the output
     :param add_headers: if True, when ``rows`` is a list of dicts or OrderedDicts, add a header row using dict keys
@@ -145,7 +145,7 @@ def get_json_file(filename, rows, keys=None, add_headers=True):
     """Returns a JSON file download response.
 
     :param filename: the name of the JSON file, without the ".json" extension
-    :param rows: see the `get_csv_content tag`_ for acceptable formats
+    :param rows: see `get_csv_content`_ for acceptable formats
     :param keys: when ``rows`` is a list of dicts or OrderedDicts, the keys of the values to include in the output
     :param add_headers: if True, when ``rows`` is a list of dicts or OrderedDicts, add a header row using dict keys
     :return: a JSON file download
@@ -180,11 +180,10 @@ def get_rows_from_dicts(rows, keys=None, key_headers=True):
 def get_xls_file(filename, rows, keys=None, add_headers=True):
     """Returns a simple XLS file download response.
 
-    Note that this function requires the following package:
-    `https://pypi.org/project/xlwt/ <https://pypi.org/project/xlwt/>`__
+    Note that this function requires the `xlwt package <https://pypi.org/project/xlwt/>`__.
 
     :param filename: the name of the XLS file, without the ".xls" extension
-    :param rows: see the `get_csv_content tag`_ for acceptable formats
+    :param rows: see `get_csv_content`_ for acceptable formats
     :param keys: when ``rows`` is a list of dicts or OrderedDicts, the keys of the values to include in the output
     :param add_headers: if True, when ``rows`` is a list of dicts or OrderedDicts, add a header row using dict keys
     :return: an XLS file download
@@ -209,11 +208,10 @@ def get_xls_file(filename, rows, keys=None, add_headers=True):
 def get_xlsx_file(filename, rows, keys=None, add_headers=True):
     """Returns a simple XLSX file download response.
 
-    Note that this function requires the following package:
-    `https://pypi.org/project/openpyxl/ <https://pypi.org/project/openpyxl/>`__
+    Note that this function requires the `openpyxl package <https://pypi.org/project/openpyxl/>`__.
 
     :param filename: the name of the XLSX file, without the ".xlsx" extension
-    :param rows: see the `get_csv_content tag`_ for acceptable formats
+    :param rows: see `get_csv_content`_ for acceptable formats
     :param keys: when ``rows`` is a list of dicts or OrderedDicts, the keys of the values to include in the output
     :param add_headers: if True, when ``rows`` is a list of dicts or OrderedDicts, add a header row using dict keys
     :return: an XLSX file download
@@ -236,32 +234,34 @@ def get_xlsx_file(filename, rows, keys=None, add_headers=True):
 
 
 
-def get_csv_rows_from_queryset(queryset, fields, prettify_headers=False, derived_fields=None, dynamic_columns=None, agg_delimiter=', '):
+def get_csv_rows_from_queryset(queryset, fields, derived_fields=None, dynamic_columns=None, prettify_headers=True, agg_delimiter=', '):
     """Returns a list of lists suitable for building a CSV file or spreadsheet.
 
-    "Field" names used to populate each column are specified in ``fields`` and may take one of the following forms:
+    **BASIC USAGE**
+
+    ``fields`` is used to populate CSV columns from ``queryset`` and may take one of the following forms:
 
     ..  code-block:: python
 
         (
-            'field',
-            'method',
-            'choice_field',
-            'rep__user__name'
-            '_annotated__avg',
-            '_derived',
-            ('field', 'Field With Custom Title'),
-            ('method', 'Method With Custom Title')
-            ('choice_field', 'Choice Field', {V1: TEXT1, V2: TEXT2 . . .}),
-            ('rep__user__name', 'Auto Annotated User Name'),
-            ('_annotated__avg', 'Annotated Average'),
-            ('_derived', 'Programmatically Derived')
+            "field",
+            "method",
+            "choice_field",
+            "rep__user__name"
+            "_annotated__avg",
+            "_derived",
+            ("field", "Field With Custom Title"),
+            ("method", "Method With Custom Title")
+            ("choice_field", "Choice Field", {V1: TEXT1, V2: TEXT2 . . .}),
+            ("rep__user__name", "Auto Annotated User Name"),
+            ("_annotated__avg", "Annotated Average"),
+            ("_derived", "Programmatically Derived")
         )
 
     In general, all fields are specified in one of two ways:
 
-    1. Provide only the field name
-    2. Provide a tuple of the form :python:`("field_name", "Column Display")`
+    1. Provide only the field name, which doubles as the column header
+    2. Provide a tuple of the form :python:`("field_name", "Column Header")`
 
     The field name in this scheme may be any one of the following:
 
@@ -273,105 +273,131 @@ def get_csv_rows_from_queryset(queryset, fields, prettify_headers=False, derived
     When ``field`` is a standard field or method, simply specify the field or method, and the resultant value for
     each record in the queryset will be used to populate the associated column. For choice fields, when the value
     retrieved is not display-worthy (e.g. an integer), a per-value display dict may be passed as the third member of
-    a tuple. This will result in values being replaced by associated display values when provided.
+    a tuple. This will be used to map field values to the display values with which we want to populate the associated
+    column.
 
-    By default, fields that contain a "__" in them will automatically be retrieved via annotation. For example, for
-    "rep__user__name", we would perform the following annotation:
-
-    ..  code-block:: python
-
-        queryset = queryset.annotate(rep__user__name=F('rep__user__name'))
-
-    Using this approach, we can represent any ForeignKey field in our output. If we have a ManyToManyField and want
-    to auto-annotate it as well, we can indicate this by adding a "+" sign at the end of the field name. For example,
-    for "rep__tasks__title" (where each rep can have multiple tasks), we would pass "rep__tasks__title+". This will
-    result in the following:
+    By default, fields that contain a "__" in them will automatically be retrieved via annotation. For example,
+    "rep__user__name" would result in the following annotation:
 
     ..  code-block:: python
 
-        queryset = queryset.annotate(rep__tasks__title=StringAgg("rep__tasks__title", ", ", distinct=True))
+        queryset = queryset.annotate(rep__user__name=F("rep__user__name"))
 
-    When auto-annotation proves insufficient, we may manually create custom annotated fields by prepending a "_"
-    character to the beginning of a field. For example, if we wanted a different delimiter in the above annotation,
-    we might do the following:
+    Thus, we can represent any foreign key field in our output. If the join contains a many-to-many relationship, we
+    can indicate this by appending a "+" sign. For example, "rep__tasks__title+" (all tasks assigned to a rep) would
+    result in the following annotation:
 
     ..  code-block:: python
 
-        queryset = queryset.annotate(_tasks=StringAgg("rep__tasks__title", "|", distinct=True))
-        get_csv_rows_from_queryset(queryset, ["_tasks" . . .] . . .)
+        queryset = queryset.annotate(
+            rep__tasks__title=StringAgg("rep__tasks__title", AGG_DELIMITER, distinct=True)
+        )
 
-    Beginning a field "_" will disable auto-annotation, necessitating a manual definition.
+    When auto-annotation proves insufficient, we may reference manual annotations by prepending "_" to a field name.
+    For example, we could define and reference a "_tasks" field as follows:
 
+    ..  code-block:: python
 
+        get_csv_rows_from_queryset(
+            queryset.annotate(_tasks=StringAgg("rep__tasks__title", ", ", distinct=True)),
+            ["_tasks", . . .]
+            . . .
+        )
 
+    This would produce results identical to passing "rep__tasks__title+" in ``fields``.
 
+    **ADVANCED USAGE**
 
-    Note that ManyToMany fields will require
-    a custom annotation that joins resultant values together.
+    In some instances, the values we want to include will either be difficult or impossible to derive via annotation.
+    In these cases, we can use ``derived_fields`` to supply the data for these fields. For example, suppose we track
+    user visits to our sites in a way that makes them difficult to annotate. We might use the following to add this
+    data to the CSV:
 
+    ..  code-block:: python
 
-
-    . Custom annotations containing "__" must begin with an underscore, as in "_annotated__avg", so that they are not inadvertently auto annotated. Alternatively, for more complex operations, the "values" argument may take the form (FUNCTION, HEADERS), where FUNCTION returns a row of data and HEADERS the header row. For example, you might use something like this:
-
-
-
-    table to retrieve via "annotate", or a custom annotation. Whenever "__" appears in a field, an annotation by
-    this field name will automatically be added to the queryset. For example, for "rep__user__name", we would do
-    the following:
-
-        queryset = queryset.annotate(rep__user__name=F('rep__user__name'))
-
-    Thus any ForeignKey field can be represented in the output. ManyToMany fields will likely require a custom
-    annotation that joins resultant values together (i.e. via StringAgg). Custom annotations containing "__" must
-    begin with an underscore, as in "_annotated__avg", so that they are not inadvertently auto annotated.
-    Alternatively, for more complex operations, the "values" argument may take the form (FUNCTION, HEADERS), where
-    FUNCTION returns a row of data and HEADERS the header row. For example, you might use something like this:
-
-        (lambda o: [o.name, o.company.name, o.company.sites()], ['User', 'Company', 'Company Sites'])
-
-    Make sure to use a "select_related" on the queryset when referencing related models to increase efficiency.
-    Also note the dict provided above as the third value in the "choice_field" tuple. When provided, this will be
-    used to map the result value, which may be a number or textual key, to a more readable display value. For
-    dynamic displays, use "derived_fields".
-
-    :param queryset: the queryset from which to retrieve ``values``
-    :param fields: a tuple or list of fields or pseudo-fields with whose values to populate columns
-    :param prettify_headers: when a header is not explicitly provided, set this to True to title case the field, split
-        the field by "__" and take the last string, and replace any remaining underscores with spaces.
-    :param derived_fields: a function that takes "queryset" and returns a dictionary of derived field results for use
-        in the report. Suppose I have a complex operation that needs doing and want to represent this as a field on
-        the report, though it is not a real field. I could do this by adding a bound field on the model and calling it
-        once per record, but this may prove slow and inefficient. Alternatively, I could provide a function that will
-        perform the calculations all at once and return results in per-primary key dictionary which will then be pulled
-        in for the pseudo-field. The function should return something like the following:
-
-            {
-                '_field_1: {
-                    QUERYSET_PRIMARY_KEY_1: VALUE_1,
-                    QUERYSET_PRIMARY_KEY_2: VALUE_2,
-                    . . .
-                },
-                '_field_2: {. . .}
+        def get_derived_fields(queryset):
+            . . .
+            RETURN_VALUE = {
+                "_cool": {USER_1_PK: 5, USER_2_PK: 3 . . .},
+                "_awesome": {USER_1_PK: 1, USER_2_PK: 30 . . .},
+                "_rockin": {USER_2_PK: 8 . . .}
             }
+            return RETURN_VALUE
 
-        "_field_1" and "_field_2" in "values" will be filled with the corresponding data from the primary key dict.
-    :param dynamic_columns: a function that takes "queryset" and returns a tuple of dynamic headers and corresponding
-        row data that will be appended to headers / rows generated from "values". The tuple should looks something
-        like the following:
+        get_csv_rows_from_queryset(
+            user_queryset,
+            [
+                "first_name",
+                "last_name",
+                ("_cool", "CoolSite Visits"),
+                ("_awesome", "AwesomeSite Visits"),
+                ("_rockin", "RockinSite Visits")
+            ],
+            derived_fields=get_derived_fields,
+            . . .
+        )
 
-            (
-                [HEADER_1, HEADER_2 . . .],
+    We see here that ``derived_fields`` takes a function that returns a dict whose keys correspond to a field in
+    ``fields``. Each key then references another dict, which in this case contains user primary key / user visit pairs.
+    For each row in :python:`user_queryset`, we expect to find the visits for field ``SITE_FIELD`` in
+    :python:`RETURN_VALUE[SITE_FIELD][USER_PK]` and will use that data to populate the associated row.
+
+    In other instances, we may need to dynamically add columns to the CSV, some of which may need to appear in
+    different orders or not at all, depending on the records in ``queryset``. In these cases, instead of using
+    ``derived_fields``, which is suited for static columns, we would pass a function of the following form in
+    ``dynamic_columns``:
+
+    ..  code-block:: python
+
+        def get_dynamic_columns(queryset):
+            . . .
+            RETURN_VALUE = (
+                [
+                    "Header 1",
+                    "Header 2",
+                    . . .
+                ],
                 {
-                    QUERYSET_PRIMARY_KEY_1: [VALUE_1, VALUE_2 . . .],
-                    QUERYSET_PRIMARY_KEY_2: [VALUE_1, VALUE_2 . . .],
+                    RECORD_1_PK: ["Record 1, Value 1", "Record 1, Value 2", . . .],
+                    RECORD_2_PK: ["Record 2, Value 1", "Record 2, Value 2", . . .],
+                    RECORD_3_PK: ["Record 3, Value 1", "Record 3, Value 2", . . .],
                     . . .
                 }
             )
+            return RETURN_VALUE
 
-        This is primarily intended as a means for including dynamic columns that may differ from one queryset to the
-        next.
+    Values associated with each record id should occur in the same order as the headers in the first member of the
+    return tuple and should have the same number of members. Both headers and record data will be appended to the end
+    of each row.
+
+    If all of these methods prove insufficient, we may try one final approach. ``fields`` may also be a tuple of
+    a function and a list of headers. We might do something like the following, for example:
+
+    ..  code-block:: python
+
+        get_csv_rows_from_queryset(
+            user_queryset,
+            (
+                lambda user: [user.first_name, user.last_name, user.age, user.sex]
+                ["First Name", "Last Name", "Age", "Sex"]
+            ),
+            . . .
+        )
+
+    The function should take a record from the queryset and return the row for that queryset. This approach is both
+    the most straightforward and versatile, but it is also the least efficient, especially when each function call
+    requires numerous queries. Generally, it should be used only as a last resort.
+
+    :param queryset: the queryset from which to retrieve ``values``
+    :param fields: a tuple or list of fields or pseudo-fields with whose values to populate columns
+    :param derived_fields: a function that takes `queryset` and returns a dictionary of derived field results
+    :param dynamic_columns: a function that takes `queryset` and returns a tuple of headers and a dict of data lists
+        keyed to queryset primary keys; the data list should be the same length and order as the headers to which
+        they correspond
+    :param prettify_headers: when a header is not explicitly provided, set this to True to split the field by "__",
+        title case the last string, and replace any underscores therein with spaces, and return the result as a header
     :param agg_delimiter: the delimiter to use when aggregating many-to-many values into a string
-    :return: a list of lists, ready to be fed into "get_csv_content" or anything that makes use of it
+    :return: a list of lists, ready to be fed into `get_csv_content`_ or anything that makes use of it
     """
     if not queryset:
         return []
@@ -435,7 +461,7 @@ def get_csv_rows_from_queryset(queryset, fields, prettify_headers=False, derived
                     for f in fields:
                         v = getattr(d, f, None)
                         if v is None:
-                            m = df.get(f, None)  # get the derived id / value map for this field, if one exists
+                            m = df.get(f, None)  # get the derived id / value dict for this field, if one exists
                             if m:
                                 v = m.get(d.pk, None)
                         elif callable(v):  # get the value of bound methods

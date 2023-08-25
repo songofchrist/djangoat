@@ -3,10 +3,10 @@
 .. role:: django(code)
    :language: django
 
-.. _get_csv_content tag: #djangoat.utils.get_csv_content
 
-Utils
-=====
+
+Utilities
+=========
 
 Various utility functions to make life just a little bit easier.
 

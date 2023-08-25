@@ -39,3 +39,14 @@ templates_path = ['_templates']
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 html_theme = 'sphinx_rtd_theme'
 html_static_path = ['_static']
+
+# Global links
+rst_epilog = """
+.. _cachefrag: models.html#djangoat.models.CacheFrag
+.. _cachefrag tag: templatetags.html#djangoat.templatetags.djangoat.cachefrag
+.. _data tag: templatetags.html#djangoat.templatetags.djangoat.data
+.. _dataf filter: templatetags.html#djangoat.templatetags.djangoat.dataf
+.. _get_csv_content: utils.html#djangoat.utils.get_csv_content
+.. _get_csv_rows_from_queryset: utils.html#djangoat.utils.get_csv_rows_from_queryset
+.. _jsonfield: https://docs.djangoproject.com/en/dev/topics/db/queries/#querying-jsonfield
+"""

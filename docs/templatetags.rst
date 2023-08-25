@@ -3,12 +3,6 @@
 .. role:: django(code)
    :language: django
 
-.. _cachefrag: models.html#djangoat.models.CacheFrag
-.. _cachefrag tag: #djangoat.templatetags.djangoat.cachefrag
-.. _data tag: #djangoat.templatetags.djangoat.data
-.. _dataf filter: #djangoat.templatetags.djangoat.dataf
-.. _jsonfield: https://docs.djangoproject.com/en/dev/topics/db/queries/#querying-jsonfield
-
 Template Tags
 =============
 
