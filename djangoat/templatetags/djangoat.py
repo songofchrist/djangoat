@@ -377,7 +377,7 @@ def data(context, key, *args):
     prove advantageous.
 
     The `data tag`_ can accept as many arguments as necessary, but for functions with fewer than two arguments, you
-    may also use the `dataf`_  filter below, which operates on the same principle but uses filter syntax.
+    may also use the `dataf filter`_  below, which operates on the same principle but uses filter syntax.
 
     As for how various querysets and functions make their way into the ``DJANGOAT_DATA``, this is a matter of
     preference. Adding them at the bottom of an app's ``models.py`` file saves importing models but may result in

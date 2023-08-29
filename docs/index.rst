@@ -7,6 +7,7 @@ Welcome to Djangoat's documentation!
 
    installation
    models
+   admin
    utils
    templatetags
 

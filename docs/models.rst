@@ -1,3 +1,8 @@
+.. role:: python(code)
+   :language: python
+.. role:: django(code)
+   :language: django
+
 Models
 ======
 

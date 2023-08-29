@@ -16,7 +16,7 @@ settings.configure(
     SECRET_KEY='docs',
     INSTALLED_APPS=[
         'django.contrib.sessions',
-        'djangoat'
+        'djangoat',
     ],
 )
 django.setup()
@@ -40,7 +40,7 @@ templates_path = ['_templates']
 html_theme = 'sphinx_rtd_theme'
 html_static_path = ['_static']
 
-# Global links
+# Global settings
 rst_epilog = """
 .. _cachefrag: models.html#djangoat.models.CacheFrag
 .. _cachefrag tag: templatetags.html#djangoat.templatetags.djangoat.cachefrag

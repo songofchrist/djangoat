@@ -20,15 +20,15 @@ def csv_export_action(fields, filename, description='Export selected items to a 
     Returns an export action for use in the Django admin.
 
     This function is designed to create an action that hands off the queryset from an admin list page to
-    `get_csv_rows_from_queryset`_ and yields a CSV download file containing the details in ``fields``. This allows
-    us to create and modify various kinds of reports very quickly.
+    `get_csv_rows_from_queryset`_ and yields a CSV download file containing the data corresponding to members of
+    ``fields``, allowing us to create and modify various kinds of reports very quickly.
 
     The function uses `get_csv_rows_from_queryset`_ to translate the queryset into CSV rows, and its ``fields``,
-    ``derived_fields``, ``dynamic_columns``, ``prettify_headers``, and ``agg_delimiter`` arguments all  take the
-    same form as the like-named arguments do in that function. Studying that function will help to inform us of
-    the variety of options available to this one.
+    ``derived_fields``, ``dynamic_columns``, ``prettify_headers``, and ``agg_delimiter`` arguments all take the
+    same form as the like-named arguments in that function. Studying that function will help us grasp the variety
+    of options available to this one.
 
-    The ``filter`` argument is a function that takes a queryset, the request object, and modeladmin, and returns a
+    The ``filter`` argument is a function that takes a queryset, the request object, and the modeladmin, and returns a
     queryset. This allows us to modify the queryset on its way to `get_csv_rows_from_queryset`_, filtering out certain
     items, adding annotations, etc. It can also be used to translate one kind of queryset into another. For example,
     if we want to export a list of tasks for users selected on the user list page, we might pass in a filter function
@@ -69,8 +69,9 @@ def csv_export_action(fields, filename, description='Export selected items to a 
             . . .
 
     Because we transform the queryset received by ``filter`` into a ``Task`` queryset, all members of ``fields``
-    relate to this model, which relates to the user and has a name, due date, and completed field. We will then be
-    able to generate this report by selecting the newly created action and clicking "Go".
+    relate to this model, which relates to the user via foreign key and has a name, due date, and completed field.
+    To generate this report, we would simply go to the user list in the admin, select the users whose tasks we want
+    to pull, and execute the newly created action.
 
     :param fields: fields to include in the export; see the like-named argument from `get_csv_rows_from_queryset`_
         for more
@@ -106,13 +107,25 @@ def csv_export_action(fields, filename, description='Export selected items to a 
 
 # ADMINS
 class CacheFragAdmin(admin.ModelAdmin):
+    """A premade admin for manipulating `CacheFrag`_ records. To register, add the following somewhere in your project:
+
+    ..  code-block:: python
+
+        from django.contrib import admin
+        from djangoat.models import CacheFrag
+        from djangoat.admin import CacheFragAdmin
+
+        admin.site.register(CacheFrag, CacheFragAdmin)
+    """
     actions = clear_cache_frags,
     list_display = 'name', 'site_id', 'user', 'tokens'
     list_filter = 'name', 'site_id'
     search_fields = 'user__email', 'user__first_name', 'user__last_name', 'tokens'
 
     def has_add_permission(self, request):
+        """:meta private:"""
         return False
 
     def has_change_permission(self, request, obj=None):
+        """:meta private:"""
         return False

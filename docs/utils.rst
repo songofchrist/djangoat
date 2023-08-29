@@ -3,8 +3,6 @@
 .. role:: django(code)
    :language: django
 
-
-
 Utilities
 =========
 

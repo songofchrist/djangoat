@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
+import calendar
 import csv
-# import datetime
-# import difflib
+import datetime
+import difflib
 import json
-# import random
+import random
 # # import openpyxl
 # import os
 # import requests
@@ -17,7 +18,7 @@ from io import BytesIO, StringIO
 # # from PIL import Image, ImageOps
 # from tempfile import NamedTemporaryFile
 #
-# from django.apps import apps
+from django.apps import apps
 # from django.conf import settings
 # from django.core.mail import EmailMultiAlternatives
 # from django.core.files import File
@@ -65,7 +66,7 @@ def get(obj, *keys):
 
     ..  code-block:: python
 
-        get(response, 'books', 0, "awards", 0)
+        get(response, "books", 0, "awards", 0)
 
     If at any point the value we're targeting doesn't exist, we'll return ``None``. Otherwise, we'll return the desired
     value. This method is especially useful in targeting elements in unpredictable or variable structures.
@@ -138,99 +139,6 @@ def get_csv_file(filename, rows, dialect=csv.excel, keys=None, add_headers=True)
         content_type='text/csv',
         headers={'Content-Disposition': f'attachment; filename="{filename}.csv"'}
     )
-
-
-
-def get_json_file(filename, rows, keys=None, add_headers=True):
-    """Returns a JSON file download response.
-
-    :param filename: the name of the JSON file, without the ".json" extension
-    :param rows: see `get_csv_content`_ for acceptable formats
-    :param keys: when ``rows`` is a list of dicts or OrderedDicts, the keys of the values to include in the output
-    :param add_headers: if True, when ``rows`` is a list of dicts or OrderedDicts, add a header row using dict keys
-    :return: a JSON file download
-    """
-    return HttpResponse(
-        json.dumps(
-            get_rows_from_dicts(rows, keys, add_headers) if rows and not isinstance(rows[0], (list, tuple)) else rows,
-            sort_keys=True,
-            indent=2
-        ),
-        content_type='text/json',
-        headers={'Content-Disposition': f'attachment; filename="{filename}.json"'}
-    )
-
-
-
-def get_rows_from_dicts(rows, keys=None, key_headers=True):
-    """Transforms a list of dicts / OrderedDicts into a list of lists
-
-    :param rows: a list of dicts / OrderedDicts
-    :param keys: the keys whose values to include in the resulting lists; if unspecified, these will be derived from
-        the first entry in ``rows``
-    :param key_headers: if True, add a ``keys`` header to resultant rows
-    :return: a list of lists, suitable for output as a CSV
-    """
-    if not keys:
-        keys = list(rows[0].keys())
-    return ([keys] if key_headers else []) + [[r[n] for n in keys] for r in rows]
-
-
-
-def get_xls_file(filename, rows, keys=None, add_headers=True):
-    """Returns a simple XLS file download response.
-
-    Note that this function requires the `xlwt package <https://pypi.org/project/xlwt/>`__.
-
-    :param filename: the name of the XLS file, without the ".xls" extension
-    :param rows: see `get_csv_content`_ for acceptable formats
-    :param keys: when ``rows`` is a list of dicts or OrderedDicts, the keys of the values to include in the output
-    :param add_headers: if True, when ``rows`` is a list of dicts or OrderedDicts, add a header row using dict keys
-    :return: an XLS file download
-    """
-    import xlwt
-    if rows and not isinstance(rows[0], (list, tuple)):  # transform a list of dicts into a list of lists
-        rows = get_rows_from_dicts(rows, keys, add_headers),
-    wb = xlwt.Workbook(encoding='utf-8')
-    s = wb.add_sheet('Sheet1')
-    for r, row in enumerate(rows):
-        for c in range(len(row)):
-            s.write(r, c, row[c])
-    r = HttpResponse(
-        content_type='application/ms-excel',
-        headers={'Content-Disposition': f'attachment; filename="{filename}.xls"'}
-    )
-    wb.save(r)
-    return r
-
-
-
-def get_xlsx_file(filename, rows, keys=None, add_headers=True):
-    """Returns a simple XLSX file download response.
-
-    Note that this function requires the `openpyxl package <https://pypi.org/project/openpyxl/>`__.
-
-    :param filename: the name of the XLSX file, without the ".xlsx" extension
-    :param rows: see `get_csv_content`_ for acceptable formats
-    :param keys: when ``rows`` is a list of dicts or OrderedDicts, the keys of the values to include in the output
-    :param add_headers: if True, when ``rows`` is a list of dicts or OrderedDicts, add a header row using dict keys
-    :return: an XLSX file download
-    """
-    import openpyxl
-    if rows and not isinstance(rows[0], (list, tuple)):  # transform a list of dicts into a list of lists
-        rows = get_rows_from_dicts(rows, keys, add_headers),
-    wb = openpyxl.Workbook()
-    s = wb.active
-    s.title = 'Sheet1'
-    for r in rows:
-        s.append(r)
-    r = HttpResponse(
-        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        headers={'Content-Disposition': f'attachment; filename="{filename}.xlsx"'}
-    )
-    wb.save(r)
-    return r
-
 
 
 
@@ -483,28 +391,273 @@ def get_csv_rows_from_queryset(queryset, fields, derived_fields=None, dynamic_co
 
 
 
-# def get_file_from_url(url, save_path=None):
-#     """
-#     Downloads a file from the given url.
-#
-#     :param url: the url from which to retrieve the file
-#     :param save_path: the path to which the file should be saved
-#     :return: on success, return True if a save path is provided or the file if it has not; return False on failure
-#     """
-#     try:
-#         f = requests.get(url).content
-#     except:
-#         return False
-#     if save_path:
-#         with open(save_path, 'wb+') as sf:
-#             sf.write(f)
-#         return True
-#     return f
-#
-#
-#
-#
-#
+def get_json_file(filename, rows, keys=None, add_headers=True):
+    """Returns a JSON file download response.
+
+    :param filename: the name of the JSON file, without the ".json" extension
+    :param rows: see `get_csv_content`_ for acceptable formats
+    :param keys: when ``rows`` is a list of dicts or OrderedDicts, the keys of the values to include in the output
+    :param add_headers: if True, when ``rows`` is a list of dicts or OrderedDicts, add a header row using dict keys
+    :return: a JSON file download
+    """
+    return HttpResponse(
+        json.dumps(
+            get_rows_from_dicts(rows, keys, add_headers) if rows and not isinstance(rows[0], (list, tuple)) else rows,
+            sort_keys=True,
+            indent=2
+        ),
+        content_type='text/json',
+        headers={'Content-Disposition': f'attachment; filename="{filename}.json"'}
+    )
+
+
+
+def get_masked_text(text, show=4, start=False, char='*'):
+    """Returns a masked string.
+
+    ..  code-block:: python
+
+        text = "MyPassword123"
+        get_masked_text(text)  # "MyPa*********"
+        get_masked_text(text, 7)  # "MyPassw******"
+        get_masked_text(text, start=True)  # "*********d123"
+        get_masked_text(text, char="-")  # "MyPa---------"
+
+    :param text: the text to mask
+    :param show: the number of characters to reveal
+    :param start: if True, mask characters from the start of the text, otherwise from the end
+    :param char: the character with which to mask ``text``
+    :return: the masked text
+    """
+    hide = char * (len(text) - show)
+    return hide + text[-show:] if start else text[:show] + hide
+
+
+
+def get_n_digit_string(n):
+    """Returns a string of ``n`` digits, including leading zeros.
+
+    For example, for an ``n`` of 6, we would get a string of characters between "000000" and "999999" inclusive.
+
+    :param n: how many digits the string should be
+    :return: the string
+    """
+    s = 10 ** int(n)
+    return str(random.randrange(s, s * 2))[1:]
+
+
+
+def get_offset_date(date, months=1, day=1):
+    """Returns a date offset from ``date`` by ``months`` and set to ``day``.
+
+    Occasionally, we want to create a date range offset from a particular date. This is easy enough using a delta of
+    days, but when we want to jump forward or back by X months, calculations require a bit more attention, given the
+    variable number of days in each month. This function removes that complexity. Consider the examples below:
+
+    ..  code-block:: python
+
+        date = datetime.date(2021, 10, 4)
+        get_offset_date(date)  # 2021-11-01
+        get_offset_date(date, -1)  # 2021-09-01
+        get_offset_date(date, 5, 15)  # 2022-03-15
+        get_offset_date(date, -5, 15)  # 2021-05-15
+        get_offset_date(date, -10)  # 2020-12-01
+        get_offset_date(date, -22)  # 2019-12-01
+        get_offset_date(date, 22)  # 2023-08-01
+        get_offset_date(date, 22, None)  # 2023-08-31
+
+    :param date: the reference date
+    :param months: months forward (positive) or back (negative)
+    :param day: an integer day or ``None`` to get the last day of the given month
+    :return: a new date
+    """
+    y = date.year
+    m = date.month + months
+    if months:
+        if m < 1:
+            y += int(m / 12) - 1
+            m = 12 + (m % 12)
+        elif m > 12:
+            y += int(m / 12)
+            m = m % 12
+    return datetime.date(y, m, day or calendar.monthrange(y, m))
+
+
+
+def get_queryset_by_keys(keys, model, field=None):
+    """Returns a RawQuerySet joined on ``keys``.
+
+    When we pass a long-running process to a task, we'll often have to reconstitute a queryset using the primary
+    keys of its members. Doing this with an ``IN`` clause can be inefficient. A faster alternative is to join the
+    table on these keys using a ``VALUES`` clause. This function, derived from a
+    `solution on Stack Overflow <https://stackoverflow.com/questions/24647503/performance-issue-in-update-query>`__,
+    simplifies this process.
+
+    :param keys: the primary keys to join on
+    :param model: a model or string suitable for ``apps.get_model``
+    :param field: the field to join on; if unspecified, it will default to the primary key of ``model``
+    :return: a RawQuerySet
+    """
+    if isinstance(model, str):
+        model = apps.get_model(model)
+    app = model._meta.app_label
+    model = model._meta.model_name
+    if not field:
+        field = str(model._meta.pk).split('.')[-1]
+    values = ','.join(f'({v})' for v in keys)
+    return model.objects.raw(f'SELECT * FROM {app}_{model} INNER JOIN (VALUES {values}) vals(v) ON ({field} = v);')
+
+
+
+def get_rows_from_dicts(rows, keys=None, key_headers=True):
+    """Transforms a list of dicts / OrderedDicts into a list of lists
+
+    :param rows: a list of dicts / OrderedDicts
+    :param keys: the keys whose values to include in the resulting lists; if unspecified, these will be derived from
+        the first entry in ``rows``
+    :param key_headers: if True, add a ``keys`` header to resultant rows
+    :return: a list of lists, suitable for output as a CSV
+    """
+    if not keys:
+        keys = list(rows[0].keys())
+    return ([keys] if key_headers else []) + [[r[n] for n in keys] for r in rows]
+
+
+
+def get_text_diff(original, revised, p_tag='p'):
+    """Returns text with tags indicating the difference between the ``original`` and ``revised`` text.
+
+    Suppose an editor asks a friend or ChatGPT to proofread an article he's written. The friend edits and returns it.
+    The editor now needs to be able to see what changes were made at a glance, so he can decide which changes to
+    accept and which to reject. This function accepts both the editor's ``original`` text and the ``revised`` text
+    and returns text that includes tags that can be styled and displayed to quickly indicate where changes were made.
+
+    By default, changes are computed per paragraph, indicated by new lines. This assumes that both versions of a text
+    have the same number of paragraphs. If they don't, we'll ignore paragraph divisions and simply computer the
+    difference on the text as a whole.
+
+    :param original: the original text, where new lines indicate new paragraphs
+    :param revised: the revised text, where new lines indicate new paragraphs
+    :param p_tag: the tag to use to separate paragraphs, indicated by line breaks; set to None to
+        ignore paragraphs
+    :return: the text with diff tags
+    """
+    add_tags = lambda r, a: '<span class="change">' + (f'<span class="delete">{" ".join(r)}</span>' if r else '') + (f'<span class="add">{" ".join(a)}</span>' if a else '') + '</span>'
+    ps = []
+    op = original.split('\n') if p_tag else [original]
+    rp = revised.split('\n') if p_tag else [revised]
+    if len(op) != len(rp):  # ignore paragrpahs, adding <br> tags for display purposes
+        op = [op.join('<br>\n')]
+        rp = [rp.join('<br>\n')]
+    for i, p in enumerate(op):
+        if p:
+            changed = False
+            np = []
+            add = []
+            rm = []
+            for d in difflib.ndiff(p.split(' '), rp[i].split(' ')):
+                if d[0] == '?':
+                    continue
+                t = d[2:]
+                if d[0] == ' ':
+                    if add or rm:  # insert the change string before the next word
+                        np.append(add_tags(rm, add))
+                        add = []
+                        rm = []
+                    np.append(t)
+                    continue
+                if d[0] == '-':
+                    changed = True
+                    rm.append(t)
+                else:
+                    changed = True
+                    add.append(t)
+            if add or rm:  # insert the change string before ending the paragraph
+                np.append(add_tags(rm, add))
+            ps.append(f'<{p_tag} class="{"changed" if changed else "unchanged"}">{" ".join(np)}</{p_tag}>' if p_tag else ' '.join(np))
+    return '\n'.join(ps)
+
+
+
+def get_days_in_range(start, end):
+    """Returns a tuple of weekday and non-weekday dates between ``start`` and ``end``.
+
+    :param start: a start date
+    :param end: an end date
+    :return: a tuple of weekday dates and non-weekday dates, inclusive of ``start`` and ``end``
+    """
+    wd = []
+    we = []
+    d1 = datetime.timedelta(days=1)
+    while start <= end:
+        if start.weekday() < 5:  # weekdays
+            wd.append(start)
+        else:  # weekends
+            we.append(start)
+        start += d1
+    return wd, we
+
+
+
+def get_xls_file(filename, rows, keys=None, add_headers=True):
+    """Returns a simple XLS file download response.
+
+    Note that this function requires the `xlwt package <https://pypi.org/project/xlwt/>`__.
+
+    :param filename: the name of the XLS file, without the ".xls" extension
+    :param rows: see `get_csv_content`_ for acceptable formats
+    :param keys: when ``rows`` is a list of dicts or OrderedDicts, the keys of the values to include in the output
+    :param add_headers: if True, when ``rows`` is a list of dicts or OrderedDicts, add a header row using dict keys
+    :return: an XLS file download
+    """
+    import xlwt
+    if rows and not isinstance(rows[0], (list, tuple)):  # transform a list of dicts into a list of lists
+        rows = get_rows_from_dicts(rows, keys, add_headers),
+    wb = xlwt.Workbook(encoding='utf-8')
+    s = wb.add_sheet('Sheet1')
+    for r, row in enumerate(rows):
+        for c in range(len(row)):
+            s.write(r, c, row[c])
+    r = HttpResponse(
+        content_type='application/ms-excel',
+        headers={'Content-Disposition': f'attachment; filename="{filename}.xls"'}
+    )
+    wb.save(r)
+    return r
+
+
+
+def get_xlsx_file(filename, rows, keys=None, add_headers=True):
+    """Returns a simple XLSX file download response.
+
+    Note that this function requires the `openpyxl package <https://pypi.org/project/openpyxl/>`__.
+
+    :param filename: the name of the XLSX file, without the ".xlsx" extension
+    :param rows: see `get_csv_content`_ for acceptable formats
+    :param keys: when ``rows`` is a list of dicts or OrderedDicts, the keys of the values to include in the output
+    :param add_headers: if True, when ``rows`` is a list of dicts or OrderedDicts, add a header row using dict keys
+    :return: an XLSX file download
+    """
+    import openpyxl
+    if rows and not isinstance(rows[0], (list, tuple)):  # transform a list of dicts into a list of lists
+        rows = get_rows_from_dicts(rows, keys, add_headers),
+    wb = openpyxl.Workbook()
+    s = wb.active
+    s.title = 'Sheet1'
+    for r in rows:
+        s.append(r)
+    r = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        headers={'Content-Disposition': f'attachment; filename="{filename}.xlsx"'}
+    )
+    wb.save(r)
+    return r
+
+
+
+
+
+
 #
 # def get_json_file_contents(path):
 #     """
@@ -520,66 +673,18 @@ def get_csv_rows_from_queryset(queryset, fields, derived_fields=None, dynamic_co
 #
 #
 #
-# def get_n_digit_string(n):
-#     """Return a string of N digits, including leading zeros.
-#
-#     :param n: how many digits the string should be
-#     :return: the string
-#     """
-#     s = 10 ** int(n)
-#     return str(random.randrange(s, s * 2))[1:]
+
 #
 #
 #
-# def get_previous_month(date, months_back=1):
-#     """
-#     Get a tuple containing the year and month of a previous month, referenced from date. For example, if today is
-#     1/2/2021, this will return (2020, 12) by default. If we go 3 months back, we'll instead get (2020, 10) and so on.
-#     Results may then be used to form new date objects useful in queries.
-#
-#     :param date: the reference date
-#     :param months_back: how many months back to get a result for
-#     :return: a tuple of the form (YEAR, MONTH)
-#     """
-#     y = date.year
-#     m = date.month - months_back
-#     if m < 1:
-#         y = y + int(m / 12) - 1
-#         m = 12 - (-m % 12)
-#     return y, m
+
 #
 #
 #
 #
 #
 #
-# def get_url_name(request, remove_prefix=None):
-#     name = resolve(request.path_info).url_name
-#     return name[len(remove_prefix):] if remove_prefix and name.startswith(remove_prefix) else name
-#
-#
-#
-# def get_number_display(n):
-#     """
-#     :param n: a number
-#     :return: a integer, if the number is whole, or a decimal
-#     """
-#     return int(n) if int(n) == n else n
-#
-#
-#
-# def get_weekdays_in_range(start, end):
-#     """
-#     :param start: a start date
-#     :param end: an end date
-#     :return: a list of dates that are weekdays
-#     """
-#     wd = []
-#     while start <= end:
-#         if start.weekday() < 5:  # ignore weekends
-#             wd.append(start)
-#         start += datetime.timedelta(days=1)
-#     return wd
+
 #
 #
 #
@@ -606,69 +711,11 @@ def get_csv_rows_from_queryset(queryset, fields, derived_fields=None, dynamic_co
 #
 #
 #
-# def insert_diff_tags(original, revised, p_tag='p', exclude_unchanged=False):
-#     """
-#     Adds tags to text to indicate the difference between the original and revised text.
-#
-#     :param original: the original text, where new lines indicate new paragraphs
-#     :param revised: the revised text, where new lines indicate new paragraphs
-#     :param p_tag: the tag to use to separate paragraphs, indicated by line breaks (defaults to "p").Set to None to
-#         ignore paragraphs. If set, the line break count from original to revised should be the same. If they are not,
-#         we'll, ignore line breaks
-#     :param exclude_unchanged: if True, we'll exclude any unchanged "p_tag" blocks.
-#     :return: the text with diff tags
-#     """
-#     def _add_tags(rm, add):
-#         return '<span class="change">' + ('<span class="delete">' + ' '.join(rm) + '</span>' if rm else '') + ('<span class="add">' + ' '.join(add) + '</span>' if add else '') + '</span>'
-#     ps = []
-#     op = original.split('\n') if p_tag else [original]
-#     rp = revised.split('\n') if p_tag else [revised]
-#     if len(op) != len(rp):
-#         op = [original]
-#         rp = [revised]
-#     for i, p in enumerate(op):
-#         if p:
-#             changed = False
-#             np = []
-#             add = []
-#             rm = []
-#             for d in difflib.ndiff(p.split(' '), rp[i].split(' ')):
-#                 if d[0] == '?':
-#                     continue
-#                 t = d[2:]
-#                 if d[0] == ' ':
-#                     if add or rm:  # insert the change string before the next word
-#                         np.append(_add_tags(rm, add))
-#                         add = []
-#                         rm = []
-#                     np.append(t)
-#                     continue
-#                 if d[0] == '-':
-#                     changed = True
-#                     rm.append(t)
-#                 else:
-#                     changed = True
-#                     add.append(t)
-#             if add or rm:  # insert the change string before ending the paragraph
-#                 np.append(_add_tags(rm, add))
-#             if exclude_unchanged and not changed:
-#                 continue
-#             ps.append('<' + p_tag + '>' + ' '.join(np) + '</' + p_tag + '>' if p_tag else ' '.join(np))
-#     return '\n'.join(ps)
+
 #
 #
 #
-# def mask_text(text, show, end=True, char='*'):
-#     """
-#
-#     :param text: the text to mask
-#     :param show: number of characters to reveal
-#     :param end: set to True to place the mask characters at the end, False at the start
-#     :return: the masked text
-#     """
-#     hide = char * (len(text) - show)
-#     return text[:show] + hide if end else hide + text[-show:]
-#
+
 #
 #
 # def merge_nested_dicts(*dicts):
@@ -715,33 +762,7 @@ def get_csv_rows_from_queryset(queryset, fields, derived_fields=None, dynamic_co
 #
 #
 #
-# def join_on_values(values, model, app=None, field=None):
-#     """
-#     Reconstituting a queryset from a long list of ids using an IN clause is inefficient. The method detailed in the
-#     link below uses a VALUES clause instead and performs a join. Use this on queries with oversized IN clauses to
-#     improve efficiency.
-#     https://stackoverflow.com/questions/24647503/performance-issue-in-update-query
-#
-#     :param values: the values to join on
-#     :param model: a model instance or string of the form "APP.MODEL", "APP_MODEL", or "MODEL" (requires "app" argument)
-#     :param app: the string app name; if "model" is not a model instance or does not contain the app, this must be provided
-#     :param field: the field to join on (defaults to the primary key of "model")
-#     :return: a RawQuerySet
-#     """
-#     if isinstance(model, str):
-#         if not app:
-#             app, model = model.replace('.', '_').split('_')
-#         _model = apps.get_model(app_label=app, model_name=model)
-#     else:
-#         _model = model
-#         app = model._meta.app_label
-#         model = model._meta.model_name
-#     if not field:
-#         field = str(_model._meta.pk).split('.')[-1]
-#     values = ','.join('(%d)' % v for v in values)
-#     return _model.objects.raw(f'SELECT * FROM {app}_{model} INNER JOIN (VALUES {values}) vals(v) ON ({field} = v);')
-#
-#
+
 #
 # def move_m2m_relation(m2m, move_from, move_to):
 #     """
