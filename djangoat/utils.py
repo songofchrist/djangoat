@@ -5,12 +5,9 @@ import datetime
 import difflib
 import json
 import random
-# # import openpyxl
-# import os
 # import requests
 # import time
 import types
-# # import xlwt
 #
 # # from easy_thumbnails.files import get_thumbnailer
 # from functools import update_wrapper
@@ -412,6 +409,25 @@ def get_json_file(filename, rows, keys=None, add_headers=True):
 
 
 
+def get_json_file_contents(path):
+    """Returns a dict with the contents of the file at ``path``.
+
+    If the specified file does not exist or is poorly formatted, an empty dict will be returned instead.
+
+    :param path: the path to a json file
+    :return: a dict of file contents
+    """
+    try:
+        with open(path, 'r') as f:
+            c = f.read()
+            if c:
+                return json.loads(c)
+    except:
+        pass
+    return {}
+
+
+
 def get_masked_text(text, show=4, start=False, char='*'):
     """Returns a masked string.
 
@@ -657,22 +673,6 @@ def get_xlsx_file(filename, rows, keys=None, add_headers=True):
 
 
 
-
-#
-# def get_json_file_contents(path):
-#     """
-#     :param path: the path to a json file
-#     :return: the contents of the file or an empty dict if it does not exist or is empty
-#     """
-#     if os.path.exists(path):
-#         with open(path, 'r') as f:
-#             c = f.read()
-#             if c:
-#                 return json.loads(c)
-#     return {}
-#
-#
-#
 
 #
 #

@@ -8,6 +8,7 @@ Welcome to Djangoat's documentation!
    installation
    models
    admin
+   builders
    utils
    templatetags
 
