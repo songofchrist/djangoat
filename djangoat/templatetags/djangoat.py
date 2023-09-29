@@ -6,9 +6,9 @@ from django.core.cache import InvalidCacheBackendError, caches
 from django.core.cache.utils import make_template_fragment_key
 from django.template import Library, Node, TemplateSyntaxError, VariableDoesNotExist
 
-from ..models import CACHE_FRAG_KEYS, CacheFrag
+from .. import DJANGOAT_DATA, DJANGOAT_PAGER, TIMES
 
-from .. import DJANGOAT_DATA, TIMES
+from ..models import CACHE_FRAG_KEYS, CacheFrag
 
 register = Library()
 
@@ -412,8 +412,8 @@ def data(context, key, *args):
 @register.simple_tag(takes_context=True)
 def pager(context,
           queryset,
-          items_per_page=getattr(settings, 'DJANGOAT_PAGER_ITEMS_PER_PAGE', 20),
-          plus_or_minus=getattr(settings, 'DJANGOAT_PAGER_SHOW_PLUS_OR_MINUS', 3)):
+          items_per_page=DJANGOAT_PAGER['items_per_page'],
+          plus_or_minus=DJANGOAT_PAGER['plus_or_minus']):
     """Returns a widget and queryset based on the current page.
 
     Suppose we have a queryset ``books``. To enable paging on these objects we would begin by invoking this template
@@ -432,7 +432,7 @@ def pager(context,
     - ``pager_total``: the total number of records
     - ``pager``: a widget for navigating pages
 
-    We would then display out book records and the paging widget. A list page template might look something like the
+    We would then display our book records and the paging widget. A list page template might look something like the
     following:
 
     ..  code-block:: django
@@ -446,13 +446,18 @@ def pager(context,
         <hr>
         {{ pager }}
 
-    The following may be added to Django's settings to alter this tag's default behavior:
+    Widget defaults are available in ``djangoat.DJANGOAT_PAGER`` and may be altered by updating this dict, which
+    takes the form below:
 
-    - ``DJANGOAT_PAGER_ITEMS_PER_PAGE`` (defaults to 20)
-    - ``DJANGOAT_PAGER_NEXT_PAGE_TEXT`` (defaults to "Next »")
-    - ``DJANGOAT_PAGER_PREVIOUS_PAGE_TEXT`` (defaults to "« Prev")
-    - ``DJANGOAT_PAGER_QUERY`` (defaults to "page")
-    - ``DJANGOAT_PAGER_SHOW_PLUS_OR_MINUS`` (defaults to 3)
+    ..  code-block:: python
+
+        DJANGOAT_PAGER = {
+            'items_per_page': 20,
+            'next_text': 'Next »',
+            'param': 'page',
+            'plus_or_minus': 3,
+            'prev_text': '« Prev',
+        }
 
     Note that this tag relies on the current request object being present in the template context to retrieve the
     current page from the query string, so be sure to include this in context on any pages where pager is used.
@@ -465,9 +470,13 @@ def pager(context,
     :param plus_or_minus: how many links to display on either side of the current page
     :type plus_or_minus: int
     """
-    q = getattr(settings, 'DJANGOAT_PAGER_QUERY', 'page')
+    qp = DJANGOAT_PAGER['param']
+    g = context['request'].GET
+    cqs = '&'.join([f'{k}={g[k]}' for k in g.keys() if k != qp])  # the current query string, excluding the page param
+    if cqs:
+        cqs += '&'
     try:
-        p = int(context['request'].GET.get(q, 1))
+        p = int(g.get(qp, 1))
     except:
         p = 1
     if p < 1:
@@ -482,21 +491,21 @@ def pager(context,
     # Build the widget
     w = []
     if p > 1:
-        w.append(f'<a href="?{q}={p - 1}">{getattr(settings, "DJANGOAT_PAGER_PREVIOUS_PAGE_TEXT", "« Prev")}</a>')
+        w.append(f'<a href="?{cqs}{qp}={p - 1}">{DJANGOAT_PAGER["prev_text"]}</a>')
     rl = p - plus_or_minus
     ru = p + plus_or_minus
     if rl > 1:
-        w.append(f'<a href="?{q}=1">1</a>')
+        w.append(f'<a href="?{cqs}{qp}=1">1</a>')
         if rl > 2:
             w.append(' ... ')
-    for i in range(1 if rl < 0 else rl, (pt if ru > pt else ru) + 1):
-        w.append('<a href="javascript:void(0)" class="active">%d</a>' % p if i == p else f'<a href="?{q}={i}">{i}</a>')
+    for i in range(1 if rl < 1 else rl, (pt if ru > pt else ru) + 1):
+        w.append('<a href="javascript:void(0)" class="active">%d</a>' % p if i == p else f'<a href="?{cqs}{qp}={i}">{i}</a>')
     if ru < pt - 1:
         w.append(' ... ')
     if ru < pt:
-        w.append(f'<a href="?{q}={pt}">{pt}</a>')
+        w.append(f'<a href="?{cqs}{qp}={pt}">{pt}</a>')
     if pt and p != pt:
-        w.append(f'<a href="?{q}={p + 1}">{getattr(settings, "DJANGOAT_PAGER_NEXT_PAGE_TEXT", "Next »")}</a>')
+        w.append(f'<a href="?{cqs}{qp}={p + 1}">{DJANGOAT_PAGER["next_text"]}</a>')
     context.update({
         'pager_start': ps + 1,
         'pager_end': pe,
@@ -510,8 +519,7 @@ def pager(context,
     return ''
 
 
-"""
-"""
+
 
 # TAGS
 @register.tag

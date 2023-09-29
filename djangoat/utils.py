@@ -20,14 +20,14 @@ from django.apps import apps
 # from django.core.mail import EmailMultiAlternatives
 # from django.core.files import File
 # from django.contrib import admin
-# from django.contrib.redirects.models import Redirect
 from django.contrib.postgres.aggregates import StringAgg
+from django.contrib.redirects.models import Redirect
 from django.db.models import F
-# from django.db.models.fields.files import ImageFieldFile
+from django.db.models.fields.files import ImageFieldFile
 from django.http.response import HttpResponse
 # from django.template import loader
 # from django.utils.html import strip_tags
-# from django.utils.safestring import mark_safe
+from django.utils.safestring import mark_safe
 # from django.urls import path, resolve
 # from django.urls.resolvers import URLPattern
 
@@ -671,137 +671,30 @@ def get_xlsx_file(filename, rows, keys=None, add_headers=True):
 
 
 
+def update_redirects(old_path, new_path, sites):
+    """Updates redirects for the specified sites.
+
+    This function works with the `Django Redirects app <https://docs.djangoproject.com/en/dev/ref/contrib/redirects/>`__
+    and helps to keep Redirect records in check. For example, if an editor changes the url of his story from A to B
+    and later from B to C, then when a user accesses A, they will be redirected from A to B to C rather than directly
+    from A to C. To forgo this inefficiency, whenever a new redirect is added, we'll update prior Redirect records,
+    so that they go directly to the most recent path. We'll also remove records that would result in circular redirects.
+    For example, if we have redirects from A to C and B to C and add one from C to A, the redirect from A to C will
+    be overwritten as C to A.
+
+    :param old_path: the url to redirect from
+    :param new_path: the url to redirect to
+    :param sites: a list of Site objects or site ids to consider
+    """
+    rs = Redirect.objects.filter(site__in=sites)
+    rs.filter(old_path=new_path).update(old_path=old_path, new_path=new_path)  # if A->B and adding B->A, overwrite A->B with B->A
+    rs.filter(new_path=old_path).update(new_path=new_path)  # if A->B and adding B->C, update A->B to A->C
+    for s in sites:  # create new as needed
+        r, _ = Redirect.objects.get_or_create(site=s, old_path=old_path, new_path=new_path)
 
 
 
-#
-#
-#
 
-#
-#
-#
-#
-#
-#
-
-#
-#
-#
-#
-#
-#
-#
-# def g_recaptcha_is_valid(token=None):
-#     """
-#     See the following links for more:
-#     https://developers.google.com/recaptcha/docs/invisible
-#     https://developers.google.com/recaptcha/docs/verify
-#
-#     :param token: a token posted via grecaptcha
-#     :return: True if the token is valid, otherwise False
-#     """
-#     return requests.post(
-#         'https://www.google.com/recaptcha/api/siteverify',
-#         data={
-#             'secret': settings.G_RECAPTCHA_SECRET_KEY,
-#             'response': token
-#         }
-#     ).json().get('success', False) if token else False
-#
-#
-#
-
-#
-#
-#
-
-#
-#
-# def merge_nested_dicts(*dicts):
-#     """
-#     This method expects two or more dicts, all sharing the same basic form and merges both the main and nested dicts.
-#     For example, consider the dicts below:
-#
-#         {"settings": {"on": False, "email": True}, "next": "return"}
-#         {"settings": {"on": True}}
-#         {"settings": {"title": "Send Email"}, "next": "save"}
-#
-#     When provided in this order, these will all merge into the following dict:
-#
-#         {"settings": {"on": True, "email": True, "title": "Send Email"}, next: "save"}
-#
-#     All nested dicts will be merged with their counterparts in prior dicts. Non-dict items will overwrite their
-#     counterparts as normal.
-#
-#     NOTE: if for a particular key, we have both dict and non-dict values, we'll throw an error.
-#
-#     :param dicts: the dicts to be merged
-#     :return: the new dict resulting from the merge
-#     """
-#     r = {}
-#     for d in dicts:  # prep results
-#         for k in d:
-#             if isinstance(d[k], dict):  # set this key to {'_merge': [nested1, nested2 . . .]
-#                 if k in r:
-#                     if isinstance(r[k], dict):
-#                         r[k]['_merge'].append(d[k])
-#                     else:
-#                         raise Exception('Attempting to merge dict %s with non-dict value "%s" for key "%s"' % (d[k], r[k], k))
-#                 else:
-#                     r[k] = {'_merge': [d[k]]}
-#             elif k in r and isinstance(r[k], dict):
-#                 raise Exception('Attempting to merge non-dict value "%s" with dicts %s for key "%s"' % (str(d[k]), r[k]['_merge'], k))
-#             else:  # overwrite current value for this key with the latest one
-#                 r[k] = d[k]
-#     for k in r:  # at this point all dicts in the object should be in merge lists
-#         if isinstance(r[k], dict) and '_merge' in r[k]:
-#             args = r[k]['_merge']
-#             r[k] = args[0] if len(args) == 1 else merge_nested_dicts(*args)
-#     return r
-#
-#
-#
-
-#
-# def move_m2m_relation(m2m, move_from, move_to):
-#     """
-#     Move members of an M2M relation from one object to another. For example, if I need to consolidate one Company into
-#     another and need to move the first's sponsored MediaItem records to the next, I would use the following call:
-#
-#         move_m2m_relation(MediaItem.sponsors, COMPANY_1_ID, COMPANY_2_ID)
-#
-#     :param m2m: the M2M field (i.e. MediaItem.sponsors of class Company)
-#     :param move_from: the object to move away from (i.e. a Company or Company id)
-#     :param move_to: the object to move to (i.e. another Company or Company id)
-#     """
-#     column_name = m2m.rel.model._meta.model_name  # i.e. company
-#     related_column_name = m2m.rel.related_model._meta.model_name  # i.e. mediaitem
-#
-#     objs = m2m.through.objects  # access the through table directly
-#     src = objs.filter(**{column_name: move_from})
-#     dest = objs.filter(**{column_name: move_to})
-#     overlap = set([getattr(t, related_column_name + '_id') for t in src]).intersection( [getattr(t, related_column_name + '_id') for t in dest])
-#     src.filter(**{related_column_name + '_id__in': list(
-#         overlap)}).delete()  # kill related fields already present in the destination company
-#     src.update(**{column_name: move_to})  # update the rest
-#
-#
-#
-# def readable_join(items, separator=', ', last='and '):
-#     """
-#     :param items: a list of items to join
-#     :param separator:
-#     :param last: the string to include between the last two items, not including the separator
-#     :return: a human readable list of joined items (i.e. [1, 2, 3] yields "1, 2, and 3")
-#     """
-#     if not items:
-#         return ''
-#     items = list(map(str, items))
-#     if len(items) == 2:
-#         return items[0] + ' ' + last + items[1]
-#     return separator.join(items[:-1]) + separator + last + items[-1] if len(items) > 1 else items[0]
-#
 #
 #
 # def register_custom_admin_view(**kwargs):
@@ -1125,52 +1018,39 @@ def get_xlsx_file(filename, rows, keys=None, add_headers=True):
 #
 #
 #
-# def thumb(file, alias='default'):
-#     """
-#     :param file: any file field
-#     :param alias: an easy thumbnails alias
-#     :return: the html for this thumbnail
-#     """
-#     src = thumb_url(file, alias)
-#     return mark_safe(f'<img src="{src}">') if src else ''
-#
-#
-#
-# def thumb_url(file, alias='default'):
-#     """
-#     :param file: any file field
-#     :param alias: an easy thumbnails alias
-#     :return: the url of the image, if this is an ImageFieldFile, or of an icon associated with the file type
-#     """
-#     if file:
-#         if file.__class__ == ImageFieldFile:
-#             try:
-#                 return get_thumbnailer(file)[alias].url
-#             except:  # programmatically the image appears to be there, but thumbnailer couldn't retrieve it
-#                 return settings.STATIC_URL + 'my/images/missing.jpg'
-#         else:
-#             return settings.STATIC_URL + 'my/images/%s.jpg' % ('pdf' if file.name.endswith('.pdf') else 'file')
-#     return ''
-#
-#
-#
-# def update_redirects(old_path, new_path, sites):
-#     """
-#     Make updates to Redirect objects based on the urls / sites provided. This will not only add any
-#     new redirects, but it will update existing redirects that point to the url being redirected from.
-#     For example, if we are redirecting A->B and add another redirect B->C, we will update the first
-#     redirect to A->C to forego the need for multiple redirects. Or if we change back to the old path,
-#     such that we now have C->A, we will remove any redirects originating at A.
-#
-#     :param old_path: the url to redirect from
-#     :param new_path: the url to redirect to
-#     :param sites: a list of Site objects or site ids to consider
-#     """
-#     if old_path and new_path and sites:
-#         redirects = Redirect.objects.filter(site__in=sites)
-#         redirects.filter(old_path=new_path).delete()  # remove any redirects pointing away from new_path
-#         redirects.filter(new_path=old_path).update(new_path=new_path)  # change any redirects pointed at old_path to new_path
-#         for s in sites:  # create redirects for the indicated sites
-#             r, _ = Redirect.objects.get_or_create(site=s, old_path=old_path)
-#             r.new_path = new_path
-#             r.save()
+
+
+DJANGOAT_THUMB_TYPE_IMAGES = {  # static paths (without STATIC_URL) keyed to the lowercase file extension
+    # For example, {'pdf': 'thumbs/pdf.jpg'}
+}
+
+def thumb(file, *args, **kwargs):
+    """
+    :param file: any file field
+    :param alias: an easy thumbnails alias
+    :return: the html for this thumbnail
+    """
+    src = thumb_url(file, alias)
+    return mark_safe(f'<img src="{src}">') if src else ''
+
+
+
+def thumb_url(file, *args, **kwargs):
+    """Return the url of a thumbnail for ``file`` based on ``args`` and ``kwargs``.
+
+    :param file: any file field
+    :return: the url of the thumbnail
+    """
+    if file:
+        if file.__class__ == ImageFieldFile:
+            try:
+                url = DJANGOAT_THUMB_URL_FUNCTION
+            except:
+                return settings.STATIC_URL + 'my/images/missing.jpg'
+        else:
+            return settings.STATIC_URL + 'my/images/%s.jpg' % ('pdf' if file.name.endswith('.pdf') else 'file')
+    return ''
+
+
+
+
