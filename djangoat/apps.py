@@ -15,4 +15,5 @@ class DjangoatConfig(AppConfig):
         cfs = CacheFrag.objects.all()
         if getattr(settings, 'SITE_ID', None):  # no reason to import frags for other sites
             cfs = cfs.filter(Q(site_id=None) | Q(site_id=settings.SITE_ID))
-        CACHE_FRAG_KEYS.update({f'{cf.name}|{cf.user_id or ""}|{cf.site_id or ""}|{cf.tokens}': cf.key for cf in cfs})
+        # TODO below causes error with resolving auth.User; need to include this in settings somehow
+        # CACHE_FRAG_KEYS.update({f'{cf.name}|{cf.user_id or ""}|{cf.site_id or ""}|{cf.tokens}': cf.key for cf in cfs})

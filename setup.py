@@ -18,5 +18,7 @@ setuptools.setup(
     url='https://github.com/songofchrist/djangoat',
     license='MIT',
     python_requires='>=3.9',
-    install_requires=[]
+    install_requires=[
+        'django>=4.0.7'
+    ]
 )

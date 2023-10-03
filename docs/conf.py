@@ -50,4 +50,5 @@ rst_epilog = """
 .. _get_csv_rows_from_queryset: utils.html#djangoat.utils.get_csv_rows_from_queryset
 .. _jsonfield: https://docs.djangoproject.com/en/dev/topics/db/queries/#querying-jsonfield
 .. _requests api: https://github.com/psf/requests/blob/main/src/requests/api.py
+.. _thumb_url tag: templatetags.html#djangoat.templatetags.djangoat.thumb_url
 """

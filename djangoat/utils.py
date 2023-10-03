@@ -21,15 +21,15 @@ from django.apps import apps
 # from django.core.files import File
 # from django.contrib import admin
 from django.contrib.postgres.aggregates import StringAgg
-from django.contrib.redirects.models import Redirect
+# from django.contrib.redirects.models import Redirect
 from django.db.models import F
-from django.db.models.fields.files import ImageFieldFile
 from django.http.response import HttpResponse
 # from django.template import loader
 # from django.utils.html import strip_tags
-from django.utils.safestring import mark_safe
+# from django.utils.safestring import mark_safe
 # from django.urls import path, resolve
 # from django.urls.resolvers import URLPattern
+
 
 
 
@@ -672,6 +672,7 @@ def get_xlsx_file(filename, rows, keys=None, add_headers=True):
 
 
 def update_redirects(old_path, new_path, sites):
+    # TODO how to handle import of this without requiring Site dependency; or just require it? Update cache tags?
     """Updates redirects for the specified sites.
 
     This function works with the `Django Redirects app <https://docs.djangoproject.com/en/dev/ref/contrib/redirects/>`__
@@ -1019,37 +1020,6 @@ def update_redirects(old_path, new_path, sites):
 #
 #
 
-
-DJANGOAT_THUMB_TYPE_IMAGES = {  # static paths (without STATIC_URL) keyed to the lowercase file extension
-    # For example, {'pdf': 'thumbs/pdf.jpg'}
-}
-
-def thumb(file, *args, **kwargs):
-    """
-    :param file: any file field
-    :param alias: an easy thumbnails alias
-    :return: the html for this thumbnail
-    """
-    src = thumb_url(file, alias)
-    return mark_safe(f'<img src="{src}">') if src else ''
-
-
-
-def thumb_url(file, *args, **kwargs):
-    """Return the url of a thumbnail for ``file`` based on ``args`` and ``kwargs``.
-
-    :param file: any file field
-    :return: the url of the thumbnail
-    """
-    if file:
-        if file.__class__ == ImageFieldFile:
-            try:
-                url = DJANGOAT_THUMB_URL_FUNCTION
-            except:
-                return settings.STATIC_URL + 'my/images/missing.jpg'
-        else:
-            return settings.STATIC_URL + 'my/images/%s.jpg' % ('pdf' if file.name.endswith('.pdf') else 'file')
-    return ''
 
 
 

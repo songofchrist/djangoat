@@ -4,9 +4,11 @@ from django.conf import settings
 from django.utils.safestring import mark_safe
 from django.core.cache import InvalidCacheBackendError, caches
 from django.core.cache.utils import make_template_fragment_key
+from django.db.models.fields.files import ImageFieldFile
 from django.template import Library, Node, TemplateSyntaxError, VariableDoesNotExist
 
-from .. import DJANGOAT_DATA, DJANGOAT_PAGER, TIMES
+from .. import (DJANGOAT_DATA, DJANGOAT_PAGER, DJANGOAT_THUMB_GET_URL, DJANGOAT_THUMB_TYPE_HTML,
+                DJANGOAT_THUMB_TYPE_URLS, DJANGOAT_TIMES)
 
 from ..models import CACHE_FRAG_KEYS, CacheFrag
 
@@ -38,9 +40,9 @@ class CacheFragNode(Node):
             else:
                 et = 0
                 for t in expire_time.split('-'):
-                    et += TIMES.get(t, 0)  # TIMES holds seconds for predefined periods (i.e. 1d, 2h, 4m, etc.)
+                    et += DJANGOAT_TIMES.get(t, 0)  # TIMES holds seconds for predefined periods (i.e. 1d, 2h, 4m, etc.)
                 if not et:
-                    raise TemplateSyntaxError('"cachefrag" tag (or variant) got a non-integer timeout value not in TIMES: ' + repr(expire_time))
+                    raise TemplateSyntaxError('"cachefrag" tag (or variant) got a non-integer timeout value not in DJANGOAT_TIMES: ' + repr(expire_time))
                 expire_time = et
         if self.cache_name:
             try:
@@ -239,6 +241,88 @@ def seconds_to_units(seconds):
                 d = int(h / 24)
                 h -= d * 24
     return {'days': d, 'hours': h, 'minutes': m, 'seconds': seconds}
+
+
+
+@register.filter
+def thumb(file, key):
+    """Return html that represents a thumbnail for ``file`` based on ``key``.
+
+    This filter works identically to the `thumb_url tag`_, but yields html instead of a url. It also allows us
+    to associated html with a particular type of file via ``DJANGOAT_THUMB_TYPE_HTML``. If no url is returned by
+    the ``DJANGOAT_THUMB_GET_URL`` function, then we'll first attempt to get html from this dict prior to trying
+    for a static url from ``DJANGOAT_THUMB_TYPE_URLS``. This first dict allows us to associate vector icons, such as
+    those in Font Awesome, with a particular extension rather an image. Or we may simply use styled text as the
+    thumbnail for certain kinds of files.
+
+    Note that the ``DJANGOAT_THUMB_TYPE_HTML`` will take priority. If we find a match for a particular file type in
+    this dict, we will use it and ignore entries in ``DJANGOAT_THUMB_TYPE_URLS``.
+
+    :param file: any file field
+    :param key: a key to pass to ``DJANGOAT_THUMB_GET_URL`` to indicate the kind of thumbnail to return
+    :return: thumbnail html
+    """
+    if file:
+        if DJANGOAT_THUMB_GET_URL:
+            url = DJANGOAT_THUMB_GET_URL(file, key, file.__class__ == ImageFieldFile)
+            if url:
+                return mark_safe(f'<img class="thumb" src="{url}">')
+        ext = file.name.split('.')[-1].lower()
+        html = DJANGOAT_THUMB_TYPE_HTML.get(ext, None)
+        if html:
+            return mark_safe(html)
+        url = DJANGOAT_THUMB_TYPE_URLS.get(ext, DJANGOAT_THUMB_TYPE_URLS['DEFAULT'])
+    else:
+        url = DJANGOAT_THUMB_TYPE_URLS['MISSING']
+    return mark_safe(f'<img class="thumb" src="{settings.STATIC_URL}{url}">')
+
+
+
+@register.filter
+def thumb_url(file, key):
+    """Return a thumbnail url for ``file`` based on ``key``.
+
+    This filter takes a FileField or ImageFileField and returns the url for the thumbnail of ``file``. The big idea
+    for this filter is to always return some kind of image, regardless of the kind of file passed in. We'll first
+    attempt to derive a thumbnail url using the custom ``DJANGOAT_THUMB_GET_URL`` function, which will receive ``file``
+    and ``key`` along with a third argument indicating whether  ``file`` is an ImageField. If this returns a url, we're
+    done. If not, we'll look in ``DJANGOAT_THUMB_TYPE_URLS`` for a static image whose extension matches that of
+    ``file``. If none is exists, we'll get the "DEFAULT" url. If ``file`` is itself empty, we'll return the
+    "MISSING" url. Regardless, we should end up with a url to some kind of image.
+
+    To change the static image per type, simply update the ``DJANGOAT_THUMB_TYPE_URLS`` dict, keying the path to a
+    static image with the associated lowercase file extension, not including the static url. To update the "DEFAULT"
+    or "MISSING" images, update the values of associated with these keys.
+
+    Note that ``DJANGOAT_THUMB_GET_URL`` must be defined before it can be expected to return results. You may define
+    it as follows:
+
+    ..  code-block:: python
+
+        import djangoat
+
+        def my_thumb_func(file, key, is_image):
+            . . .
+            return my_thumb_url
+
+        djangoat.DJANGOAT_THUMB_GET_URL = my_thumb_func
+
+    Also note that you needn't define this function at all unless you want individualized thumbnails for each ``file``.
+    If you only want generalized icons for different types of files, you may forgo this definition.
+
+    :param file: any file field
+    :param key: a key to pass to ``DJANGOAT_THUMB_GET_URL`` to indicate the kind of thumbnail to return
+    :return: the url of the thumbnail
+    """
+    if file:
+        if DJANGOAT_THUMB_GET_URL:
+            url = DJANGOAT_THUMB_GET_URL(file, key, file.__class__ == ImageFieldFile)
+            if url:
+                return url
+        url = DJANGOAT_THUMB_TYPE_URLS.get(file.name.split('.')[-1].lower(), DJANGOAT_THUMB_TYPE_URLS['DEFAULT'])
+    else:
+        url = DJANGOAT_THUMB_TYPE_URLS['MISSING']
+    return settings.STATIC_URL + url
 
 
 
@@ -556,7 +640,7 @@ def cachefrag(parser, token):
     :python:`["token1", "token2", "tokens3"]`. The tokens will be stored in a ``tokens`` `JSONField`_, so that it can
     easily be queried.
 
-    Also worth noting is that the values of the Djangoat's ``TIMES`` dict are automatically available in the seconds
+    Also worth noting is that the values of the ``DJANGOAT_TIMES`` dict are automatically available in the seconds
     slot of this tag. We do not immediately know how many seconds are in 6 minutes or 6 hours or 6 days, so rather than
     having to do the math each time we want to use one of these in the tag and then forgetting what the number means
     next time we encounter it, we can simply pass in "6m" or "6h" or "6d" instead. Consider the following:
@@ -569,7 +653,8 @@ def cachefrag(parser, token):
 
     You may also use time combinations like "1d-12h" for 1 day and 12 hours or "2h-30m" for 2 hours and 30 minutes.
     This ability to combine times should serve most all your needs, but should you need a value that is not available
-    by default, simply update the ``TIMES`` dict, and your custom time will become available for use with this tag.
+    by default, simply update the ``DJANGOAT_TIMES`` dict, and your custom time will become available for use with
+    this tag.
     """
     return get_cache_frag_node(parser, token, 'endcachefrag')
 

@@ -15,7 +15,19 @@ DJANGOAT_PAGER = {
     'prev_text': '« Prev',
 }
 
-TIMES = {
+DJANGOAT_THUMB_GET_URL = None
+
+DJANGOAT_THUMB_TYPE_HTML = {
+    # 'pdf': '<i class="pdf-icon"></i>'
+}
+
+DJANGOAT_THUMB_TYPE_URLS = {  # static paths (without STATIC_URL) keyed to the lowercase file extension
+    'DEFAULT': 'djangoat/img/default.jpg',
+    'MISSING': 'djangoat/img/missing.jpg',
+    'pdf': 'djangoat/img/pdf.jpg',
+}
+
+DJANGOAT_TIMES = {
     **{'1y': 365 * 24 * 60 * 60},  # one year
     **{str(t) + 'd': t * 60 * 60 * 24 for t in range(1, 365)},  # e.g. TIMES["5d"] = 5 days
     **{str(t) + 'h': t * 60 * 60 for t in range(1, 24)},  # e.g. TIMES["5h"] = 5 hours
