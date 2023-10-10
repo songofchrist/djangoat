@@ -46,9 +46,12 @@ rst_epilog = """
 .. _cachefrag tag: templatetags.html#djangoat.templatetags.djangoat.cachefrag
 .. _data tag: templatetags.html#djangoat.templatetags.djangoat.data
 .. _dataf filter: templatetags.html#djangoat.templatetags.djangoat.dataf
+.. _file: https://docs.djangoproject.com/en/dev/ref/files/file/#the-file-class
+.. _filefield: https://docs.djangoproject.com/en/dev/ref/models/fields/#filefield
 .. _get_csv_content: utils.html#djangoat.utils.get_csv_content
 .. _get_csv_rows_from_queryset: utils.html#djangoat.utils.get_csv_rows_from_queryset
 .. _jsonfield: https://docs.djangoproject.com/en/dev/topics/db/queries/#querying-jsonfield
 .. _requests api: https://github.com/psf/requests/blob/main/src/requests/api.py
+.. _retrieve_remote_file: utils.html#djangoat.utils.retrieve_remote_file
 .. _thumb_url tag: templatetags.html#djangoat.templatetags.djangoat.thumb_url
 """

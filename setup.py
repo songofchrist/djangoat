@@ -19,6 +19,7 @@ setuptools.setup(
     license='MIT',
     python_requires='>=3.9',
     install_requires=[
-        'django>=4.0.7'
+        'django>=4.0.7',
+        'pillow>=9.0.0'
     ]
 )

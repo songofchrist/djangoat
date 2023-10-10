@@ -5,27 +5,27 @@ import datetime
 import difflib
 import json
 import random
-# import requests
-# import time
+import requests
+import time
 import types
 #
 # # from easy_thumbnails.files import get_thumbnailer
 # from functools import update_wrapper
 from io import BytesIO, StringIO
-# # from PIL import Image, ImageOps
-# from tempfile import NamedTemporaryFile
-#
+from PIL import Image, ImageOps
+from tempfile import NamedTemporaryFile
+
 from django.apps import apps
-# from django.conf import settings
-# from django.core.mail import EmailMultiAlternatives
-# from django.core.files import File
+from django.conf import settings
+from django.core.mail import EmailMultiAlternatives
+from django.core.files import File
 # from django.contrib import admin
 from django.contrib.postgres.aggregates import StringAgg
 # from django.contrib.redirects.models import Redirect
 from django.db.models import F
 from django.http.response import HttpResponse
-# from django.template import loader
-# from django.utils.html import strip_tags
+from django.template import loader
+from django.utils.html import strip_tags
 # from django.utils.safestring import mark_safe
 # from django.urls import path, resolve
 # from django.urls.resolvers import URLPattern
@@ -615,6 +615,85 @@ def get_days_in_range(start, end):
 
 
 
+def get_remote_file(url, name=None, process=None):
+    """Retrieves a file from ``url`` and returns a File object ready to be assigned to a FileField.
+
+    On occasion, we may need to download a file from somewhere on the web and save it to a FileField on one of our
+    models. To do this, we might do something like the following:
+
+    ..  code-block:: python
+
+        instance.file_field = retrieve_remote_file('www.example.com/files/file.pdf', 'newname')
+        instance.save()
+
+    Because we've provided a ``name`` without an extension, the extension will be pulled from the file name in the
+    url, resulting in a file name of "newname.pdf". Had we not provided a name, the file would be saved as "file.pdf".
+
+    :param url: the url of the remote file or a dict to pass as kwargs to request.get()
+    :param name: the name of the file (defaults to the file name in the url)
+    :param process: a callback that receives the file contents, filename, and file extension and that should return
+        the same three parameters in a tuple, performing whatever manipulations to file content are needed in between
+    :return: a `File`_ object ready to be assigned to the `FileField`_ of a model instance
+    """
+    if isinstance(url, dict):
+        d = requests.get(**url).content
+        url = url['url']
+    else:
+        d = requests.get(url).content
+    if not name:
+        name = url.split('?', 1)[0].rsplit('/', 1)[-1]
+    if '.' in name:
+        name, ext = name.rsplit('.', 1)
+    else:
+        ext = url.rsplit('.', 1)
+        ext = ext[-1] if len(ext) > 1 else ''
+    f = NamedTemporaryFile(delete=True)
+    if process:
+        d, name, ext = process(d, name, ext)
+    f.write(d)
+    tf = File(f, name=f'{name}.{ext}')
+    tf.file.seek(0)
+    return tf
+
+
+
+def get_remote_image(url, name=None, format=None, alpha=None, max_dims=None):
+    """Retrieves an from ``url`` and returns a File object ready to be assigned to an ImageField.
+
+    This function uses `retrieve_remote_file`_ to download a remove image from ``url``. It also allows for certain
+    common adjustments, such as saving the image in a different format, fitting it within certain dimensions, and
+    altering the opacity. These adjustments are done using the ``process`` argument of `retrieve_remote_file`_.
+    If other more complex operations are needed, you may follow the pattern of this function to derive one for your
+    use case.
+
+    :param url: the url of the remote image or a dict to pass as kwargs to request.get()
+    :param name: the name of the file (defaults to the file name in the url)
+    :param format: a format to which to convert an image (e.g. jpeg, png, tiff, etc.)
+    :param alpha: a number from 1-255 or False to remove the alpha channel
+    :param max_dims: a tuple with the maximum dimensions into which to fit the image, maintaining aspect ratio
+    :return: a `File`_ object ready to be assigned to the `FileField`_ of a model instance
+    """
+    def process(d, name, ext):
+        NO_ALPHA = ['jpeg']
+        b = BytesIO()
+        i = Image.open(BytesIO(d))
+        if format:
+            if not ext:
+                ext = format
+            if format in NO_ALPHA and (i.mode in ('RGBA', 'LA', 'P')):  # kill the alpha channel for formats that don't support it
+                i = i.convert('RGB')
+        if alpha is False:  # remove alpha channel
+            i = i.convert('RGB')
+        elif alpha:  # set image opacity
+            i.putalpha(alpha)
+        if max_dims:  # make sure the image fits within these (W, H) dimensions
+            i = ImageOps.contain(i, max_dims)
+        i.save(b, format)
+        return b.getvalue(), name, ext
+    return get_remote_file(url, name, process if format or alpha or max_dims else None)
+
+
+
 def get_xls_file(filename, rows, keys=None, add_headers=True):
     """Returns a simple XLS file download response.
 
@@ -671,6 +750,133 @@ def get_xlsx_file(filename, rows, keys=None, add_headers=True):
 
 
 
+def send_mail(to, subject, message, files=None, **kwargs):
+    """Send an email to the specified recipient.
+
+    This function is essentially a convenience wrapper for
+    `EmailMultiAlternatives <https://docs.djangoproject.com/en/dev/topics/email/#sending-alternative-content-types>`__,
+    which is a subclass of
+    `EmailMessage <https://docs.djangoproject.com/en/dev/topics/email/#the-emailmessage-class>`__. It can
+    take any of the arguments of this class as kwargs but will fill in certain defaults automatically to streamline
+    the email process. For example, we might send a simple email as follows:
+
+    ..  code-block:: python
+
+        send_email(
+            'recipient@example.com',
+            'Example subject',
+            'Some <b>example</b> text'
+        )
+
+    Assuming no "from_email" is provided in kwargs, the above will send an email to the indicated address with the
+    specified subject and text from the ``DEFAULT_FROM_EMAIL`` of settings and, assuming no "reply_to" address is
+    provided in kwargs, will set the reply-to address to the "from_email".
+
+    If ``html`` is provided, we'll use this for the body of the email. If we would prefer to use a template instead,
+    we would do something like the following:
+
+    ..  code-block:: python
+
+        send_email(
+            'recipient@example.com',
+            'Example subject',
+            ('emails/example.html', {
+                'name': 'Joe Blo',
+                'phone': '123-456-7890'
+            })
+        )
+
+    This template will receive the provided context as well as Django settings, ``files``, and the kwargs dict and
+    will be used to generate the message body of the email.
+
+    If we need to attach one or more files to the email, we would pass these in ``files``. What we pass will ultimately
+    be attached to the email via the ``attach`` method. For example:
+
+    ..  code-block:: python
+
+        email.attach("image.jpg", image_data, "image/jpeg")
+
+    Here we have the file name, file content, and mime type of the file. These may be passed directly as a list or
+    tuple in the ``files`` list. The mime type is optional and will be guessed if not provided.
+
+    A common case where we'll want to attach a file is when a user submits an upload through a form. To attach this
+    upload to an email, simply pass :python:`request.FILES["uploaded_file"]`. We may also want to attach a file that
+    we've previously saved to a model instance. To do this, pass :python:`model_instance.my_image_field`. Or if we want
+    to grab a remote file and attach it, we would pass :python:`get_remote_file("www.example.com/files/file.pdf")`.
+
+    Another common thing we'll want to attach are CSV reports. Rather than building these and saving them to a file,
+    we can attach a CSV file by passing the file name and a list of lists, which are the report's headers and rows.
+    For example, we might pass :python:`('MyCSVFile.csv', [['H-1', 'H-2'], ['R1-1', 'R1-2'], ['R2-1', 'R2-2']])`. As
+    long as the file name ends in ".csv", we'll expect a lists of lists for file content. To get rows from a queryset,
+    we can use `get_csv_rows_from_queryset`_. We can also pass a list of dicts or OrderedDicts instead of lists, in
+    which case a list of keys may be provided as third member of the tuple, which will serve as headers and to the
+    values associated with those keys and will determine the ordering of values in each row. If these keys are not
+    provided, we'll get keys from the first dict in the list.
+
+    In summary, the ``files`` argument may be a list of any one of the following:
+
+    1. :python:`("image.jpg", image_data, "image/jpeg")`
+    2. :python:`("image.jpg", image_data)`
+    3. :python:`request.FILES["uploaded_file"]`
+    4. :python:`model_instance.my_image_field`
+    5. :python:`get_remote_file("www.example.com/files/file.pdf")`
+    6. :python:`('FromListsCSVFile.csv', [['H-1', 'H-2'], ['R1-1', 'R1-2'], ['R2-1', 'R2-2']])`
+    7. :python:`('FromDictsCSVFile.csv', [{"name": "Joe", "count": 1}, {"name": "Bob", "count": 2} . . .], ["name", "count"])`
+    8. :python:`('FromQuerysetCSVFile.csv', get_csv_rows_from_queryset(. . .))`
+
+    :param: to: a list, tuple, or comma-delimited string of recipient addresses
+    :param: subject: the subject line of the email
+    :param: message: either the html for the email body or a tuple of the form (TEMPLATE_PATH, CONTEXT_DICT)
+    :param: files: a list of file tuples / files to attach to the email
+    :param: kwargs: any of the following non-required arguments of the EmailMessage class: body, from_email, bcc,
+        connection, attachments, headers, cc, reply_to.
+    :return: the number of emails sent
+    """
+    if isinstance(to, str):
+        to = to.split(',')
+    from_email = kwargs.get('from_email', settings.DEFAULT_FROM_EMAIL)
+    kwargs.update({  # expected arguments for the EmailMessage class, also passed into template context
+        'to': to,
+        'subject': subject,
+        'from_email': from_email,
+        'reply_to': kwargs.get('reply_to', [from_email]),
+    })
+    if not isinstance(message, str):  # get message text from the provided template path / context
+        message = loader.get_template(message[0]).render({
+            'settings': settings,
+            'files': files,
+            **message[1],
+            **kwargs
+        })
+    if 'body' not in kwargs:  # make sure we have a text-only version
+        kwargs['body'] = strip_tags(message)
+    email = EmailMultiAlternatives(**kwargs)
+    email.attach_alternative(message, 'text/html')
+    if files:
+        for f in files:
+            name = mt = ''
+            if isinstance(f, (list, tuple)):  # (FILENAME, CONTENT, MIMETYPE)
+                if len(f) > 2:
+                    name, f, mt = f
+                else:
+                    name, f = f
+            if name and '.csv' in name.lower():
+                if isinstance(f, (list, tuple)):  # generate CSV content from a list of lists / dicts
+                    f = get_csv_content(f, keys=mt)  # "mt" is a list of keys to use to get values from dicts
+                    mt = None
+            elif isinstance(f, File):
+                if not name:
+                    name = f.name.split('/')[-1]
+                f = f.read()
+            elif isinstance(f, HttpResponse):
+                f = f.content
+            if not name:
+                name = str(int(time.time()))
+            email.attach(name, f, mt)
+    return email.send()
+
+
+
 def update_redirects(old_path, new_path, sites):
     # TODO how to handle import of this without requiring Site dependency; or just require it? Update cache tags?
     """Updates redirects for the specified sites.
@@ -692,6 +898,8 @@ def update_redirects(old_path, new_path, sites):
     rs.filter(new_path=old_path).update(new_path=new_path)  # if A->B and adding B->C, update A->B to A->C
     for s in sites:  # create new as needed
         r, _ = Redirect.objects.get_or_create(site=s, old_path=old_path, new_path=new_path)
+
+
 
 
 
@@ -794,84 +1002,11 @@ def update_redirects(old_path, new_path, sites):
 #
 #
 #
-# def retrieve_remote_file(url, name=None, process=None):
-#     """
-#     Temporarily store a remote file, so that we can work with it. For example, we might use this to download
-#     a file from a model field and send it as an attachment. To get a file from a file field, we would use the
-#     following:
-#
-#         retrieve_remote_file(instance.file_field.url, 'MyFileName')
-#
-#     To save this file to another file field, we would would simply use the following:
-#
-#         instance.file_field = retrieve_remote_file(. . .)
-#         instance.save()
-#
-#     Note that if "name" contains no extension, the extension will be obtained from the url.
-#
-#     :param url: the url of the remote file or a dict to pass as kwargs to request.get()
-#     :param name: the name of the file (defaults to the file name in the url)
-#     :param process: a callback that receives the file contents, filename, and file extension and should return the same
-#         three parameters in a tuple, performing whatever manipulations are needed in between.
-#     :return: the temporary file
-#     """
-#     if isinstance(url, dict):
-#         d = requests.get(**url).content
-#         url = url['url']
-#     else:
-#         d = requests.get(url).content
-#     if not name:
-#         name = url.split('?', 1)[0].rsplit('/', 1)[-1]
-#     if '.' in name:
-#         name, ext = name.rsplit('.', 1)
-#     else:
-#         ext = url.rsplit('.', 1)
-#         ext = ext[-1] if len(ext) > 1 else ''
-#     f = NamedTemporaryFile(delete=True)
-#     if process:
-#         d, name, ext = process(d, name, ext)
-#     f.write(d)
-#     tf = File(f, name=f'{name}.{ext}')
-#     tf.file.seek(0)
-#     return tf
+
 #
 #
 #
-# def retrieve_remote_image(url, options=None, name=None):
-#     """
-#     Like "retrieve_remote_file", but has certain common shortcuts for image manipulation via PIL. More advanced
-#     manipulations may be done simply via a custom "process" callback of "retrieve_remote_file", modeled on this
-#     function.
-#
-#     :param url: the url of the remote image or a dict to pass as kwargs to request.get()
-#     :param options: a dict of options for modifying the image prior to save
-#         - alpha: a number from 0-255 to execute "image.putalpha(alpha)" or False to remove the alpha channel
-#         - format: the format to which to convert an image (e.g. jpeg, png, tiff, etc.)
-#         - max_dims: a tuple with the maximum dimensions for an image, maintaining aspect ratio
-#     :param name: the name of the file (defaults to the file name in the url)
-#     :return: the temporary file
-#     """
-#     def process(d, name, ext):
-#         NO_ALPHA = ['jpeg']
-#         b = BytesIO()
-#         i = Image.open(BytesIO(d))
-#         f = options.get('format', None)
-#         if f:
-#             if not ext:
-#                 ext = f
-#             if f in NO_ALPHA and (i.mode in ('RGBA', 'LA', 'P')):  # kill the alpha channel for formats that don't support it
-#                 i = i.convert('RGB')
-#         t = options.get('alpha', None)
-#         if t is False:  # remove alpha channel
-#             i = i.convert('RGB')
-#         elif isinstance(t, int):  # set image opacity
-#             i.putalpha(t)
-#         t = options.get('max_dims', None)
-#         if t:  # make sure the image fits within these (W, H) dimensions
-#             i = ImageOps.contain(i, t)
-#         i.save(b, f)
-#         return b.getvalue(), name, ext
-#     return retrieve_remote_file(url, name, process if options else None)
+
 #
 #
 #
@@ -925,98 +1060,7 @@ def update_redirects(old_path, new_path, sites):
 #
 #
 #
-# def send_mail(to, subject, html=None, template=None, context=None, files=None, **kwargs):
-#     """
-#     A wrapper for EmailMultiAlternatives, which is a subclass of EmailMessage.
-#     https://docs.djangoproject.com/en/4.1/topics/email/#the-emailmessage-class
-#     https://docs.djangoproject.com/en/4.1/_modules/django/core/mail/message/#EmailMessage
-#
-#     :params to: a list, tuple, or comma-delimited string of recipient addresses
-#     :params subject: the subject line of the email
-#     :params html: if provided, we'll attach this html version of the email and will ignore "template"
-#     :params template: if provided (and "html" is not), we'll use the template at this path to generate the html for
-#         the email. The template will automatically receive all "kwargs" and arguments as context, in addition to
-#         "settings", which will contain Django settings. Additional context may be included in the "context" dict.
-#     :params files: a list of file tuples / files to attach to the email. The most verbose form for each member of the
-#         list is (FILENAME, CONTENT, MIMETYPE), corresponding to the arguments for the "attach" method. MIMETYPE will
-#         be guessed if not provided. In certain cases where a filename can be derived from the object in CONTENT,
-#         this object may be passed in place of the full tuple. For example, to attach the jpg image in an ImageField
-#         called "cover_image", simply pass the ImageField itself, and a file called "cover_image.jpg" will be attached.
-#
-#         Special Cases:
-#         - CSV attachment: Pass something of the form ('MyCsvFile.csv', ROWS, FIELDNAMES) where ROWS and FIELDNAMES
-#             correspond to the like-named arguments of "get_csv_content". This is simply a shortcut for attaching CSV
-#             data as a file without importing this method and is equivalent to passing the following: ('MyCsvFile.csv',
-#             get_csv_content(ROWS, keys=FIELDNAMES))
-#     :params kwargs: any of the following non-required arguments of the EmailMessage class:
-#         body, from_email, bcc, connection, attachments, headers, cc, reply_to.
-#     :return: the number of emails sent
-#
-#     NOTE: if either html or template is provided, we'll use these to derive the html of the email and, assuming no
-#         "body" is specified in "kwargs", will strip this html of its tags to create a textual version of the email.
-#     """
-#     if isinstance(to, str):
-#         to = to.split(',')
-#     kwargs.update({  # expected arguments for the EmailMessage class, also passed into template context
-#         'to': to,
-#         'subject': subject,
-#         'from_email': kwargs.get('from_email', settings.DEFAULT_FROM_EMAIL),
-#         'headers': kwargs.get('headers', {}),
-#     })
-#     kwargs['headers'].setdefault('Reply-To', kwargs['from_email'])
-#     if not html and template:
-#         html = loader.get_template(template).render({
-#             'settings': settings,
-#             'files': files,
-#             **(context or {}),
-#             **kwargs
-#         })
-#         if 'body' not in kwargs:
-#             kwargs['body'] = strip_tags(html)
-#     email = EmailMultiAlternatives(**kwargs)
-#     if html:
-#         email.attach_alternative(html, 'text/html')
-#     if files:
-#         for f in files:
-#             name = lname = mt = ''
-#             if isinstance(f, (list, tuple)):  # (FILENAME, CONTENT, MIMETYPE)
-#                 if len(f) > 2:
-#                     name, f, mt = f
-#                 else:
-#                     name, f = f
-#             if name:
-#                 lname = name.lower()
-#             if '.csv' in lname:
-#                 if isinstance(f, (list, tuple)):
-#                     f = get_csv_content(f, keys=mt)
-#                     mt = None
-#             elif isinstance(f, File):
-#                 if not name:
-#                     name = f.name.split('/')[-1]
-#                 f = f.read()
-#             elif isinstance(f, HttpResponse):
-#                 f = f.content
-#             if not name:
-#                 name = str(int(time.time()))
-#             email.attach(name, f, mt)
-#
-#     # # Attach files
-#     # for f in file_objs:
-#     #     if isinstance(f, File):
-#     #         # For Django file objects
-#     #         try:
-#     #             contents = f.file.getvalue()
-#     #         except:
-#     #             contents = f.read()
-#     #         email.attach(f.name, contents, mimetypes.guess_type(f.name)[0])
-#     #     else:
-#     #         # For files that have been opened with the "open" function, or the string path of that file
-#     #         if not isinstance(f, str):
-#     #             f = f.name
-#     #         email.attach_file(f, mimetypes.guess_type(f)[0])
-#
-#     return email.send()
-#
+
 #
 #
 
