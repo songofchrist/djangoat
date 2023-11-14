@@ -428,7 +428,7 @@ def get_json_file_contents(path):
 
 
 
-def get_masked_text(text, show=4, start=False, char='*'):
+def get_masked_text(text, show=4, char='*'):
     """Returns a masked string.
 
     ..  code-block:: python
@@ -436,17 +436,16 @@ def get_masked_text(text, show=4, start=False, char='*'):
         text = "MyPassword123"
         get_masked_text(text)  # "MyPa*********"
         get_masked_text(text, 7)  # "MyPassw******"
-        get_masked_text(text, start=True)  # "*********d123"
+        get_masked_text(text, -4)  # "*********d123"
         get_masked_text(text, char="-")  # "MyPa---------"
 
     :param text: the text to mask
-    :param show: the number of characters to reveal
-    :param start: if True, mask characters from the start of the text, otherwise from the end
+    :param show: the number of characters to reveal; if negative, characters will be revealed from the end
     :param char: the character with which to mask ``text``
     :return: the masked text
     """
-    hide = char * (len(text) - show)
-    return hide + text[-show:] if start else text[:show] + hide
+    hide = char * (len(text) - abs(show))
+    return text[:show] + hide if show > 0 else hide + text[show:]
 
 
 
@@ -615,7 +614,7 @@ def get_days_in_range(start, end):
 
 
 
-def get_remote_file(url, name=None, process=None):
+def get_remote_file(url, name=None, process=None, save_to_field=None):
     """Retrieves a file from ``url`` and returns a File object ready to be assigned to a FileField.
 
     On occasion, we may need to download a file from somewhere on the web and save it to a FileField on one of our
@@ -653,6 +652,8 @@ def get_remote_file(url, name=None, process=None):
     f.write(d)
     tf = File(f, name=f'{name}.{ext}')
     tf.file.seek(0)
+    if save_to_field:
+        save_to_field.save(tf.name, tf)
     return tf
 
 
@@ -660,9 +661,9 @@ def get_remote_file(url, name=None, process=None):
 def get_remote_image(url, name=None, format=None, alpha=None, max_dims=None):
     """Retrieves an from ``url`` and returns a File object ready to be assigned to an ImageField.
 
-    This function uses `retrieve_remote_file`_ to download a remove image from ``url``. It also allows for certain
+    This function uses `retrieve_remote_file`_ to download a remote image from ``url``. It also allows for certain
     common adjustments, such as saving the image in a different format, fitting it within certain dimensions, and
-    altering the opacity. These adjustments are done using the ``process`` argument of `retrieve_remote_file`_.
+    altering its opacity. These adjustments are done using the ``process`` argument of `retrieve_remote_file`_.
     If other more complex operations are needed, you may follow the pattern of this function to derive one for your
     use case.
 
@@ -874,6 +875,35 @@ def send_mail(to, subject, message, files=None, **kwargs):
                 name = str(int(time.time()))
             email.attach(name, f, mt)
     return email.send()
+
+
+
+def update_m2m_relations(m2m_field, x, y):
+    """
+    Suppose we have a ``sites`` field on a Story model that governs which sites each story appears on, and suppose we
+    want to move all stories on site X to site Y. We could make these updates individually, or we could execute the
+    following:
+
+    ..  code-block:: python
+
+        update_m2m_relation(Story.sites, SiteX, SiteY)
+
+    This will update all ``site_id`` fields set to ``SiteX.id`` in the ``Story.sites.through`` table to ``SiteY.id``,
+    or, in instances where this relation already exists, it will delete the record containing ``SiteX.id``. Thus all
+    Story objects that were assigned to SiteX will now be assigned to SiteY, and none will be assigned to SiteX.
+
+    :param m2m_field: the ManyToManyField whose relations we're updating (i.e. Story.sites)
+    :param x: the object or object id by which to identify relations to update (i.e. SiteX)
+    :param y: the object or object id to which relations should be updated (i.e. SiteY)
+    """
+    column_name = m2m_field.rel.model._meta.model_name  # i.e. site
+    related_column = m2m_field.rel.related_model._meta.model_name + '_id'  # i.e. story_id
+    objs = m2m_field.through.objects  # operate on the through table of the m2m_field
+    qx = objs.filter(**{column_name: x})  # i.e. Story / SiteX relations
+    qy = objs.filter(**{column_name: y})  # i.e. Story / SiteY relations
+    both = set([getattr(r, related_column) for r in qx]).intersection([getattr(r, related_column) for r in qy])  # i.e. these Story ids have a relation for both SiteX and SiteY
+    qx.filter(**{related_column + '__in': list(both)}).delete()  # i.e. delete the SiteX relation when one for SiteY already exists
+    qx.update(**{column_name: y})  # i.e. where no Story / SiteY relation exists, update SiteX to SiteY
 
 
 
