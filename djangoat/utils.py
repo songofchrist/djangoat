@@ -5,14 +5,14 @@ import datetime
 import difflib
 import json
 import random
-import requests
+# import requests
 import time
 import types
 #
 # # from easy_thumbnails.files import get_thumbnailer
 # from functools import update_wrapper
 from io import BytesIO, StringIO
-from PIL import Image, ImageOps
+# from PIL import Image, ImageOps
 from tempfile import NamedTemporaryFile
 
 from django.apps import apps
@@ -20,7 +20,8 @@ from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
 from django.core.files import File
 # from django.contrib import admin
-from django.contrib.postgres.aggregates import StringAgg
+# from django.contrib.postgres.aggregates import StringAgg
+
 # from django.contrib.redirects.models import Redirect
 from django.db.models import F
 from django.http.response import HttpResponse
@@ -30,6 +31,7 @@ from django.utils.html import strip_tags
 # from django.urls import path, resolve
 # from django.urls.resolvers import URLPattern
 
+from djangoat.constants import REGEX_DURATION_STRING
 
 
 
@@ -692,6 +694,31 @@ def get_remote_image(url, name=None, format=None, alpha=None, max_dims=None):
         i.save(b, format)
         return b.getvalue(), name, ext
     return get_remote_file(url, name, process if format or alpha or max_dims else None)
+
+
+
+def get_seconds_from_duration_string(duration):
+    ds = REGEX_DURATION_STRING.split(duration)[:-1]
+    i = len(ds) - 1
+    s = {
+        'd': 86400,
+        'dy': 86400,
+        'day': 86400,
+        'days': 86400,
+        'h': 3600,
+        'hr': 3600,
+        'hour': 3600,
+        'hours': 3600,
+        'm': 60,
+        'min': 60,
+        'minute': 60,
+        'minutes': 60,
+    }
+    t = 0
+    while i > 0:
+        t += s.get(ds[i], 1) * int(ds[i - 1])
+        i -= 2
+    return t
 
 
 

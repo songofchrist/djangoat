@@ -1,8 +1,4 @@
-import random
-import time
-
 from django.conf import settings
-from django.contrib.sessions.models import Session
 from django.core.cache import cache
 from django.db import models
 
@@ -78,7 +74,8 @@ class CacheFrag(models.Model):
     name = models.CharField(max_length=100, db_index=True)
     site_id = models.PositiveSmallIntegerField(null=True, blank=True, db_index=True)  # use an int field, so as not to require the Sites framework
     user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.CASCADE)
-    tokens = models.JSONField(null=True, blank=True)  # an array of tokens to vary on name / site / user
+    args = models.CharField(max_length=500, null=True, blank=True)  # a list of args, converted to strings and joined together by "|"; corresponds to "vary_on" in "make_template_fragment_key"
+    date_set = models.DateTimeField(null=True, blank=True)
 
     objects = CacheFragQuerySet.as_manager()
 
@@ -91,43 +88,3 @@ class CacheFrag(models.Model):
         if self.tokens:
             r.append('Tokens: ' + str(self.tokens))
         return ' | '.join(r)
-
-
-
-
-class Device(models.Model):
-    """Allows us to associate a user with a particular device and record his last login date from it.
-    """
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    key = models.CharField(max_length=500, help_text='A string that identifies one of this user\'s devices')
-    last_login = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        unique_together = 'user', 'key'
-
-
-
-class UserSession(models.Model):
-    """Allows us to associate a session with an authenticated user.
-
-    By associating a user with his sessions, we have the ability to kill a particular session when there's an
-    unrecognized login or to log a user out everywhere at once.
-    """
-    session = models.OneToOneField(Session, primary_key=True, on_delete=models.CASCADE)
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-
-
-
-def temp_upload_name(instance, filename):
-    return f'tmp/{time.time()}-{random.randrange(0, 1000000)}-{filename}'  # a unique file name
-class TempUpload(models.Model):
-    """A temporary stash for file uploads.
-
-    This model may, of course, be used for any application, but it is required for the SessionUploadForm, which writes
-    user responses to the session for later use. Because files uploaded via these forms can't be stored in the session,
-    they need a temporary place to go until we can move them to their final destination, and this model serves as that
-    place. Each record also has a date, allowing us to clean up older, orphaned uploads that never made it to their
-    final resting place.
-    """
-    file = models.FileField(null=True, blank=True, upload_to=temp_upload_name)
-    date = models.DateField(auto_now=True)
