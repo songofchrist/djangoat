@@ -1,14 +1,9 @@
 {% extends '_.html' %}
 
 {% block body %}
-  <pre><b>get_seconds_from_duration_string(duration)</b></pre>
+  <pre><h2>get_seconds_from_duration_string(duration)</h2></pre>
   <p>Unit names and abbreviations may be mixed as desired. Spaces between numbers and units will be ignored.
     Spaces, commas, and semicolons separating duration strings will be ignored. Duration strings may occur in
     any order. All of the following are functionally equivalent.</p>
   {{ get_seconds_from_duration_string }}
-{#  <table class="examples">{% for t in get_seconds_from_duration_string %}#}
-{#    <tr><td><pre><code class="language-python">{{ t.0 }}</code></pre></td><td class="hljs hljs-number">{{ t.1 }}</td></tr>#}
-{#  {% endfor %}</table>#}
-{#  <br><br>#}
-{#  {{ test }}#}
 {% endblock %}
