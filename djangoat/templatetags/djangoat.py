@@ -610,64 +610,6 @@ class CacheFragNode(Node):
                 request.djangoat.cache_keys_set.append(cache_key)  # we'll update the date_set of corresponding records once the request is complete
         return value
 
-    def render(self, context):
-        try:
-            expire_time = self.expire_time_var.resolve(context)
-        except VariableDoesNotExist:
-            raise TemplateSyntaxError('"cache" tag (or variant) got an unknown variable: ' + repr(self.expire_time_var.var))
-        if expire_time is not None and isinstance(expire_time, str):
-            if expire_time.isnumeric():
-                expire_time = int(expire_time)
-            else:
-                et = 0
-                for t in expire_time.split('-'):
-                    et += DJANGOAT_TIMES.get(t, 0)  # TIMES holds seconds for predefined periods (i.e. 1d, 2h, 4m, etc.)
-                if not et:
-                    raise TemplateSyntaxError('"cachefrag" tag (or variant) got a non-integer timeout value not in DJANGOAT_TIMES: ' + repr(expire_time))
-                expire_time = et
-        if self.cache_name:
-            try:
-                cache_name = self.cache_name.resolve(context)
-            except VariableDoesNotExist:
-                raise TemplateSyntaxError('"cachefrag" tag (or variant) got an unknown variable: ' + repr(self.cache_name.var))
-            try:
-                fragment_cache = caches[cache_name]
-            except InvalidCacheBackendError:
-                raise TemplateSyntaxError('Invalid cache name specified for "cachefrag" tag (or variant): ' + repr(cache_name))
-        else:
-            try:
-                fragment_cache = caches['template_fragments']
-            except InvalidCacheBackendError:
-                fragment_cache = caches['default']
-        vary_on = [v.resolve(context) for v in self.vary_on]
-
-        # Custom code to interact with CacheFrag
-        user = context['request'].user.id or '' if self.user else ''
-        site = self.site or ''
-        key = f'{self.fragment_name}|{user}|{site}|{vary_on}'
-        cache_key = CACHE_FRAG_KEYS.get(key, None)
-        if not cache_key:  # make sure this is in the db, but store in keys to prevent unnecessary calls
-            cf, created = CacheFrag.objects.get_or_create(key=make_template_fragment_key(self.fragment_name, [user, site] + vary_on))
-            if created:
-                cf.name = self.fragment_name
-                if user:
-                    cf.user_id = user
-                if site:
-                    cf.site_id = site
-                if vary_on:
-                    cf.tokens = vary_on
-                cf.save()
-            CACHE_FRAG_KEYS[key] = cache_key = cf.key  # save, so we don't have to hit the database
-        if settings.DEBUG:
-            print(f'CACHE FRAG "{key}" (expires in {seconds_to_units(expire_time)})')
-
-        # Resume original code
-        value = fragment_cache.get(cache_key)
-        if value is None:
-            value = self.nodelist.render(context)
-            fragment_cache.set(cache_key, value, expire_time)
-        return str(value)
-
 
 
 def _get_cache_frag_node(parser, token, tag, user=False, site=False):

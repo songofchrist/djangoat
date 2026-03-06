@@ -80,6 +80,9 @@ class CacheFrag(models.Model):
 
     objects = CacheFragQuerySet.as_manager()
 
+    class Meta:
+        verbose_name = 'Cache Fragment'
+
     def __str__(self):
         return self.name
 

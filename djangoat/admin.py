@@ -118,14 +118,16 @@ class CacheFragAdmin(admin.ModelAdmin):
         admin.site.register(CacheFrag, CacheFragAdmin)
     """
     actions = clear_cache_frags,
-    list_display = 'name', 'site_id', 'user', 'tokens'
+    list_display = 'name', 'args', 'site_id', 'user', 'date_set', 'duration', '_expires'
     list_filter = 'name', 'site_id'
-    search_fields = 'user__email', 'user__first_name', 'user__last_name', 'tokens'
+    search_fields = 'user__email', 'user__first_name', 'user__last_name', 'args'
 
     def has_add_permission(self, request):
-        """:meta private:"""
         return False
 
     def has_change_permission(self, request, obj=None):
-        """:meta private:"""
         return False
+
+    # READ ONLY FIELDS
+    def _expires(self, obj):
+        return 'EXPIRY'

@@ -1,9 +1,11 @@
 from django.shortcuts import render
 from django.utils.safestring import mark_safe
 
-from djangoat.utils import *
+from djangoat.utils import get_seconds_from_duration_string
 
 
+
+# FUNCTIONS
 def add_example_table(ctx, func, *args):
     """
     Add a table with example calls and respective results to template context.
@@ -22,6 +24,13 @@ def add_example_table(ctx, func, *args):
           ''.join([f'<tr><td><pre><code class="language-python">{c}</code></pre></td><td class="hljs hljs-number">{r}</tr><td>' for c, r in calls]) +
         '</table>'
     )
+
+
+
+# VIEWS
+def template_tags(request):
+    return render(request, 'template_tags.html')
+
 
 
 def utils(request):

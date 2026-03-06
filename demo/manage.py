@@ -6,6 +6,7 @@ import sys
 
 def main():
     """Run administrative tasks."""
+    sys.path.append('..')  # add the djangoat module to PYTHONPATH, so management commands can see it
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'demo.settings')
     try:
         from django.core.management import execute_from_command_line
