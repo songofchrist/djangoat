@@ -6,8 +6,9 @@ from .models import CacheFrag
 
 
 class Djangoat:
-    cache_keys_set = []  # any cache keys set during this request that need CacheFrag.date_set updated
-    cache_refresh = False  # if set to True, refresh all cache entries encountered in the current request
+    def __init__(self):
+        self.cache_keys_set = []  # any cache keys set during this request that need CacheFrag.date_set updated
+        self.cache_refresh = False  # if set to True, refresh all cache entries encountered in the current request
 
 
 

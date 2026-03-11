@@ -1,6 +1,40 @@
 {% extends '_.html' %}
+{% load djangoat %}
 
 {% block body %}
   <pre><h3>{% verbatim %}{% cache TIME NAME ARG1 ARG2 . . . %}Cached Content{% endcache %}{% endverbatim %}</h3></pre>
-  <p></p>
+  <p>Here we see calls to the cache tag and its variants with the resulting cached content. To clear these
+    individually or all at once, visit the <a href="/admin/djangoat/cachefrag/" target="_blank">CacheFrag admin area</a>,
+    select the fragments to clear, and select "Clear selected Cache Fragments" from the dropdown. They should update
+    on the next page load.</p>
+  <table class="examples">
+    <tr>
+      <td><pre><code class="language-django">{% verbatim %}{% cache None cache_test_always %}{{ now|date:TIME_FORMAT }}{% endcache %}{% endverbatim %}</code></pre></td>
+      <td class="hljs hljs-string">{% cache None cache_test_always %}{{ now|date:TIME_FORMAT }}{% endcache %}</td>
+    </tr>
+    <tr>
+      <td><pre><code class="language-django">{% verbatim %}{% cache 1234 cache_test_seconds %}{{ now|date:TIME_FORMAT }}{% endcache %}{% endverbatim %}</code></pre></td>
+      <td class="hljs hljs-string">{% cache 1234 cache_test_seconds %}{{ now|date:TIME_FORMAT }}{% endcache %}</td>
+    </tr>
+    <tr>
+      <td><pre><code class="language-django">{% verbatim %}{% cache '2h30m' cache_test_duration_string %}{{ now|date:TIME_FORMAT }}{% endcache %}{% endverbatim %}</code></pre></td>
+      <td class="hljs hljs-string">{% cache '2h30m' cache_test_duration_string %}{{ now|date:TIME_FORMAT }}{% endcache %}</td>
+    </tr>
+    <tr>
+      <td><pre><code class="language-django">{% verbatim %}{% cache '2h30m' cache_test_args 123 'string' %}{{ now|date:TIME_FORMAT }}{% endcache %}{% endverbatim %}</code></pre></td>
+      <td class="hljs hljs-string">{% cache '2h30m' cache_test_args 123 'string' %}{{ now|date:TIME_FORMAT }}{% endcache %}</td>
+    </tr>
+    <tr>
+      <td><pre><code class="language-django">{% verbatim %}{% usercache '2h30m' cache_test_user 123 'string' %}{{ now|date:TIME_FORMAT }}{% endusercache %}{% endverbatim %}</code></pre></td>
+      <td class="hljs hljs-string">{% usercache '2h30m' cache_test_user  123 'string' %}{{ now|date:TIME_FORMAT }}{% endusercache %}</td>
+    </tr>
+    <tr>
+      <td><pre><code class="language-django">{% verbatim %}{% sitecache '2h30m' cache_test_site 123 'string' %}{{ now|date:TIME_FORMAT }}{% endsitecache %}{% endverbatim %}</code></pre></td>
+      <td class="hljs hljs-string">{% sitecache '2h30m' cache_test_site  123 'string' %}{{ now|date:TIME_FORMAT }}{% endsitecache %}</td>
+    </tr>
+    <tr>
+      <td><pre><code class="language-django">{% verbatim %}{% usersitecache '2h30m' cache_test_usersite 123 'string' %}{{ now|date:TIME_FORMAT }}{% endusersitecache %}{% endverbatim %}</code></pre></td>
+      <td class="hljs hljs-string">{% usersitecache '2h30m' cache_test_usersite  123 'string' %}{{ now|date:TIME_FORMAT }}{% endusersitecache %}</td>
+    </tr>
+  </table>
 {% endblock %}

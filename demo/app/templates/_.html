@@ -4,13 +4,15 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/default.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/night-owl.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
-    <script>hljs.highlightAll()</script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/languages/django.min.js"></script>
     <style>
       .examples td:first-child { padding: 0 }
       .examples td:last-child { padding: 0 0.8em }
       pre { margin: 0 }
     </style>
   </head>
-  <body>{% block body %}{% endblock %}
-</body>
+  <body>
+    {% block body %}{% endblock %}
+    <script>hljs.highlightAll()</script>
+  </body>
 </html>

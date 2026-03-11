@@ -544,12 +544,12 @@ class CacheFragNode(Node):
 
     def render(self, context):
         site_id = user_id = value = None
-        request = context.get('request', None)  # must be included in context to enable updates, refresh, and user retrieval
+        try:
+            request = context['request']
+        except Exception:
+            raise KeyError('"%s" tag requires the "request" object to be included in template context' % self.tag)
         if self.user:  # the usercache or usersitecache tag
-            try:
-                user_id = request.user.id
-            except Exception:
-                raise KeyError('"%s" tag requires the "request" object to be included in template context' % self.tag)
+            user_id = request.user.id
             if not user_id:
                 raise Exception('"%s" tag is attempting to cache content for an unauthenticated user' % self.tag)
         if self.site:  # the sitecache or usersitecache tag
@@ -563,7 +563,8 @@ class CacheFragNode(Node):
             raise TemplateSyntaxError('"%s" tag got an unknown variable: %r' % (self.tag, self.expire_time_var.var))
         if expire_time is not None:
             try:  # the number of seconds in the desired duration
-                expire_time = int(expire_time) if expire_time.isnumeric() else get_seconds_from_duration_string(expire_time)
+                if isinstance(expire_time, str):
+                    expire_time = int(expire_time) if expire_time.isnumeric() else get_seconds_from_duration_string(expire_time)
             except (ValueError, TypeError):
                 raise TemplateSyntaxError('"%s" tag got an invalid timeout value: %r' % (self.tag, expire_time))
         if self.cache_name:
@@ -581,14 +582,14 @@ class CacheFragNode(Node):
             except InvalidCacheBackendError:
                 fragment_cache = caches['default']
         vary_on = [var.resolve(context) for var in self.vary_on]
-        key_tuple = CacheFrag.get_tuple(self.fragment_name, vary_on, user_id, site_id)
+        key_tuple = self.fragment_name, '|'.join(str(a) for a in vary_on) if self.vary_on else None, user_id, site_id  # a tuple unique to the key we expect from "make_template_fragment_key"
         cache_key = CACHE_FRAG_KEYS.get(key_tuple, None)  # a tuple of the form (CACHE_KEY, DURATION_STRING)
         if cache_key:  # we already have a CacheFrag record for this combination of arguments but may need to update its duration
             cache_key, prev_duration = cache_key
             if prev_duration != duration:  # the duration of this block has changed in the code; update the record to reflect this change
-                print('DEBUG: Duration updated')
-                CacheFrag.objects.filter(key=cache_key).update(duration=duration)
+                CacheFrag.objects.filter(key=cache_key).update(date_set=timezone.now(), duration=duration)
                 CACHE_FRAG_KEYS[key_tuple] = (cache_key, duration)
+                fragment_cache.delete(cache_key)  # refresh cached content, so that it matches the CacheFrag record
         else:  # create a unique key for this combination of arguments and generate a new CacheFrag record
             cache_key = make_template_fragment_key(self.fragment_name, vary_on + [user_id, site_id])
             cf, created = CacheFrag.objects.get_or_create(key=cache_key, name=self.fragment_name)
@@ -600,14 +601,14 @@ class CacheFragNode(Node):
                 cf.duration = duration
                 cf.save()
             CACHE_FRAG_KEYS[key_tuple] = (cache_key, duration)
-        if request and request.djangoat.cache_refresh:  # clear this and any other fragments encountered on this request
+        if request.djangoat.cache_refresh:  # clear this and any other fragments encountered on this request
             fragment_cache.delete(cache_key)
         else:
             value = fragment_cache.get(cache_key)
         if value is None:
-            fragment_cache.set(cache_key, self.nodelist.render(context), expire_time)
-            if request:
-                request.djangoat.cache_keys_set.append(cache_key)  # we'll update the date_set of corresponding records once the request is complete
+            value = self.nodelist.render(context)
+            fragment_cache.set(cache_key, value, expire_time)
+            request.djangoat.cache_keys_set.append(cache_key)  # we'll update the date_set of corresponding records just before sending the response
         return value
 
 
@@ -645,14 +646,15 @@ def _get_cache_frag_node(parser, token, tag, user=False, site=False):
 def cache(parser, token):
     """Creates a `CacheFrag`_ record, if needed, and returns cached content.
 
-    Aside from offering a few additional options, this tag is functionally no different from the built-in Django
-    `template cache tag <https://docs.djangoproject.com/en/dev/topics/cache/#template-fragment-caching>`__. Its
-    first two arguments are the seconds to expiration (given as an integer, a variable, or a time string) and
-    fragment name, and everything thereafter distinguishes one fragment of a particular name from the next.
+    This tag expands upon the built-in Django
+    `template cache tag <https://docs.djangoproject.com/en/dev/topics/cache/#template-fragment-caching>`__. Like the
+    built-in tag, its first two arguments are the seconds to expiration (given as an integer, a variable, or a time
+    string) and fragment name, and everything thereafter distinguishes one fragment of a particular name from the next.
 
     Unlike the built-in cache tag, this tag records each unique fragment, along with its unique key, in the database,
-    so that it can be accessed and cleared on demand. For example, if the nav bar on a particular site needs updating,
-    rather than clearing the entire cache, we can use the `CacheFrag`_ admin to clear only that one fragment.
+    so that it can be accessed and cleared on demand. For example, if we've cached the nav bar on a particular site
+    and want to refresh just that fragment, rather than clearing the entire cache, we can use the `CacheFrag`_ admin
+    to clear only that one fragment.
 
     Also, because the fragment name and other distinguishing arguments are recorded in the database, we can query on
     them to clear or delete all fragments having a particular name, associated with a particular user or site, or
@@ -691,29 +693,27 @@ def cache(parser, token):
 
     Regardless of whether the time is denoted by a number or by a date string, we will store this value in the
     associated CacheFrag record and update it whenever it changes. From this, we can also calculate the expiration
-    date of the fragment. Having these display in the admin will further inform users as to what they can expect
+    date of the fragment. Having these displayed in the admin will further inform users as to what they can expect
     from any particular fragment.
 
-    Note that as each request is made, we repopulate whatever cache fragments are required to fulfill the request,
-    and whenever a particular fragment is updated, we note that it was updated in the ``request`` object. Then, just
-    before sending the response to the user, we update the ``date_set`` field of all updated fragments. This allows
-    us to see in the admin exactly when a particular fragment was updated for troubleshooting purposes and to sort
-    fragments by date, so that older fragments that are no longer in use can be easily spotted and removed. To enable
-    this behavior, you MUST (1) include the djangoat middleware in ``settings.MIDDLEWARE`` as detailed in `setup`_
-    and (2) include the ``reqeust`` object as "request" in template context, either by passing it in or by setting
-    up a context processor. When the ``request`` object is missing, we'll skip this update, and ``date_set`` will
-    remain unchanged.
+    **Note that the request object MUST be included in template context as "request", either via a context processor
+    or by inclusion from a view.** We use the request object as follows:
+    * When "request.djangoat.cache_refresh" is set to True, we'll refresh all cache fragments encountered in the
+      current request, ensuring the user sees the most up-to-date content
+    * We'll record any fragments whose ``date_set`` needs updating in "request.djangoat.cache_keys_set" and will
+      update this field on all associated records just prior to sending the response
+    * We'll use it to access the user in the ``usercache`` and ``usersitecache`` cache tag variants
 
-    Also be aware of the ways that the cache can be cleared:
+    Cache fragments can be cleared in any of the following ways:
     * Allowing the fragment to reach its expiry
     * Filtering and manually selecting records within the admin (see `djangoat.admin.CacheFragAdmin </djangoat.admin.CacheFragAdmin.html>`)
     * Searching for records via a queryset (i.e. CacheFrag.objects.filter(user__is_staff=True).clear())
     * Setting ``request.djangoat.cache_refresh`` to True prior to rendering a view
 
     One might use a CacheFrag queryset to clear fragments if, for example, every time a post is updated, we want to
-    clear certain fragments associated with that post and nothing else. Querysets allow us to automatically target
-    those particular fragments. The final method might be useful if we're viewing a particular page as an admin and
-    want all fragments on that page refreshed, so that we can see the most up-to-date version of it.
+    clear certain fragments associated with that post and nothing else. Querysets allow us to programmatically target
+    those particular fragments. Setting the cache refresh might be useful if we're viewing a particular page as an
+    admin and want all fragments on that page refreshed, so that we can see the most up-to-date version of it.
     """
     return _get_cache_frag_node(parser, token, 'cache')
 
@@ -737,10 +737,6 @@ def usercache(parser, token):
         {% usercache 12345 FRAG_NAME %}
             User-specific content
         {% endusercache %}
-
-    Note that this tag requires that the ``request`` appear as "request" in template context, so that we can
-    retrieve the current user. The tag will error if this object is missing. It will also error if this object is
-    present but the user isn't authenticated.
     """
     return _get_cache_frag_node(parser, token, 'usercache', True)
 

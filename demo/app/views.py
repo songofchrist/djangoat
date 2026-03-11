@@ -1,4 +1,5 @@
 from django.shortcuts import render
+from django.utils import timezone
 from django.utils.safestring import mark_safe
 
 from djangoat.utils import get_seconds_from_duration_string
@@ -21,7 +22,7 @@ def add_example_table(ctx, func, *args):
         calls.append((func.__name__ + '(' + ', '.join([f'"{ea}"' if isinstance(ea, str) else str(ea) for ea in eas]) + ')', func(*eas)))
     ctx[func.__name__] = mark_safe(
         '<table class="examples">' +
-          ''.join([f'<tr><td><pre><code class="language-python">{c}</code></pre></td><td class="hljs hljs-number">{r}</tr><td>' for c, r in calls]) +
+          ''.join([f'<tr><td><pre><code class="language-python">{c}</code></pre></td><td class="hljs hljs-{"string" if isinstance(r, str) else "number"}">{r}</tr><td>' for c, r in calls]) +
         '</table>'
     )
 
@@ -29,7 +30,10 @@ def add_example_table(ctx, func, *args):
 
 # VIEWS
 def template_tags(request):
-    return render(request, 'template_tags.html')
+    return render(request, 'template_tags.html', {
+        'TIME_FORMAT': 'F jS, Y g:i a',
+        'now': timezone.now()
+    })
 
 
 

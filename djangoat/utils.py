@@ -698,6 +698,8 @@ def get_remote_image(url, name=None, format=None, alpha=None, max_dims=None):
 
 
 def get_seconds_from_duration_string(duration):
+    if duration.isnumeric():
+        return int(duration)
     ds = REGEX_DURATION_STRING.split(duration)[:-1]
     i = len(ds) - 1
     s = {

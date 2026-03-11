@@ -1,17 +1,16 @@
+import datetime
+
 from django.contrib import admin
 from django.contrib import messages
 from django.core.cache import cache
 
-from .utils import get_csv_file, get_csv_rows_from_queryset
-
-
+from .utils import get_csv_file, get_csv_rows_from_queryset, get_seconds_from_duration_string
 
 
 # FUNCTIONS
 def clear_cache_frags(modeladmin, request, queryset):
-    for cf in queryset:
-        cache.delete(cf.key)  # clear cache contents, so it can repopulate on next access
-clear_cache_frags.short_description = 'Clear selected fragments'
+    queryset.clear()
+clear_cache_frags.short_description = 'Clear selected Cache Fragments'
 
 
 
@@ -118,7 +117,7 @@ class CacheFragAdmin(admin.ModelAdmin):
         admin.site.register(CacheFrag, CacheFragAdmin)
     """
     actions = clear_cache_frags,
-    list_display = 'name', 'args', 'site_id', 'user', 'date_set', 'duration', '_expires'
+    list_display = 'name', 'args', 'site_id', 'user', 'duration', 'date_set', '_expires'
     list_filter = 'name', 'site_id'
     search_fields = 'user__email', 'user__first_name', 'user__last_name', 'args'
 
@@ -130,4 +129,6 @@ class CacheFragAdmin(admin.ModelAdmin):
 
     # READ ONLY FIELDS
     def _expires(self, obj):
-        return 'EXPIRY'
+        return (obj.date_set + datetime.timedelta(
+            seconds=get_seconds_from_duration_string(obj.duration)
+        ) if obj.duration else 'Never') if obj.date_set else '-'
