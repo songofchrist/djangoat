@@ -4,6 +4,8 @@ from django.utils.safestring import mark_safe
 
 from djangoat.utils import get_seconds_from_duration_string
 
+from djangoat import DATA
+
 
 
 # FUNCTIONS
@@ -30,9 +32,21 @@ def add_example_table(ctx, func, *args):
 
 # VIEWS
 def template_tags(request):
+    DATA.update({
+        'cube_func': lambda x: x ** 3,
+        'result_func': lambda x: range(x)
+    })
+
+
     return render(request, 'template_tags.html', {
+        'DATE_FORMAT': 'F jS, Y',
         'TIME_FORMAT': 'F jS, Y g:i a',
-        'now': timezone.now()
+        'NUM_DICT': {
+            'one': 1,
+            'two': 2,
+            'three': 3,
+        },
+        'now': timezone.now(),
     })
 
 

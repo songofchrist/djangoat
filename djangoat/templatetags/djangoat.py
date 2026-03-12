@@ -8,8 +8,8 @@ from django.template import Library, Node, TemplateSyntaxError, VariableDoesNotE
 from django.utils import timezone
 from django.utils.safestring import mark_safe
 
-from .. import (DJANGOAT_DATA, DJANGOAT_PAGER, DJANGOAT_THUMB_GET_URL, DJANGOAT_THUMB_TYPE_HTML,
-                DJANGOAT_THUMB_TYPE_URLS, DJANGOAT_TIMES)
+from .. import (DATA, DJANGOAT_PAGER, DJANGOAT_THUMB_GET_URL, DJANGOAT_THUMB_TYPE_HTML,
+                DJANGOAT_THUMB_TYPE_URLS)
 
 from ..models import CACHE_FRAG_KEYS, CacheFrag
 from ..utils import get_seconds_from_duration_string
@@ -18,31 +18,21 @@ register = Library()
 
 
 
-
-
-
-
-
-
-
-
-
 # FILTERS
 @register.filter
 def dataf(key, arg=None):
-    """Retrieves the value of :python:`DJANGOAT_DATA[key]` or, if the value is a callable, the result of the callable.
+    """Retrieves the value of ``djangoat.DATA[key]`` or, if the value is a callable, the result of the callable.
 
     The logic behind this filter is the same as that for the ``data`` tag. The only difference is that, because this
     is a filter, it is limited to at most one argument. But also because it is a filter, it can be included directly
     in for loops or chained directly to other filters, which may prove more convenient in certain cases. See the
     `data <#djangoat.templatetags.djangoat.data>`__ tag for more on the theory behind this filter.
 
-    :param key: a key in ``DJANGOAT_DATA``
-    :type key: str
-    :param arg: an argument to pass to :python:`DJANGOAT_DATA[key]` when its value is callable
-    :return: the value of :python:`DJANGOAT_DATA[key]` or, if the value is a callable, the result of the callable
+    :param key: a key in ``djangoat.DATA``
+    :param arg: an argument to pass to the function referenced by ``djangoat.DATA[key]``
+    :return: the value of ``djangoat.DATA[key]`` or, if the value is a callable, the result of the callable
     """
-    d = DJANGOAT_DATA[key]
+    d = DATA[key]
     return (d(arg) if arg else d()) if callable(d) else d
 
 
@@ -52,11 +42,10 @@ def get(dictionary, key):
     """Retrieves the value of a dictionary entry with the given key.
 
     In a Django template, to return a value using a static key we would normally use :django:`{{ DICT.KEY }}`. But
-    if KEY is variable, this won't work. With this tag, we may instead use :django:`{{ DICT|get:VARIABLE_KEY }}` to get
-    the desired value.
+    if KEY is variable, this won't work. With this tag, we may instead use :django:`{{ DICT|get:VARIABLE_KEY }}` to
+    get the desired value.
 
     :param dictionary: a dict
-    :type dictionary: dict
     :param key: a key in ``dictionary`` whose value we want to return
     :return: the value corresponding to ``key``
     """
@@ -252,7 +241,7 @@ def call_function(func, *args):
         {% call_function my_func arg1 arg2 arg3 %}
 
     Alternatively, if we want a function to be available globally, we may instead consider storing a function in
-    ``DJANGOAT_DATA`` and calling it via the `data tag`_.
+    ``djangoat.DATA`` and calling it via the `data tag`_.
 
     :param func: the function we want to call
     :type func: callable
@@ -279,7 +268,7 @@ def call_method(obj, method, *args):
 
 @register.simple_tag(takes_context=True)
 def data(context, key, *args):
-    """Retrieves the value of :python:`DJANGOAT_DATA[key]` or, if the value is a callable, the result of the callable.
+    """Retrieves the value of :python:`djangoat.DATA[key]` or, if the value is a callable, the result of the callable.
 
     To understand the usefulness of this template tag, we first need to understand the problem it solves. Suppose we
     use the queryset below in a number of different views throughout our site.
@@ -307,12 +296,12 @@ def data(context, key, *args):
 
     ..  code-block:: python
 
-        from djangoat import DJANGOAT_DATA
+        from djangoat import djangoat.DATA
 
         class Book(models.Model):
             . . .
 
-        DJANGOAT_DATA.update({
+        djangoat.DATA.update({
             'novels': Book.objects.filter(type='novel')
         })
 
@@ -338,7 +327,7 @@ def data(context, key, *args):
 
     ..  code-block:: python
 
-        DJANGOAT_DATA.update({
+        djangoat.DATA.update({
             'novels': Book.objects.filter(type='novel')
             'novels_by_authors': lambda authors: Book.objects.filter(type='novel', authors__in=authors)
         })
@@ -356,27 +345,27 @@ def data(context, key, *args):
     This approach has all of the advantages of registering a separate template tag for every unique queryset or
     callable, but with a lot less headache.
 
-    But what if we want to make use of one value in ``DJANGOAT_DATA`` within another? To do this, we'd do something
+    But what if we want to make use of one value in ``djangoat.DATA`` within another? To do this, we'd do something
     like the following:
 
     ..  code-block:: python
 
-        DJANGOAT_DATA.update({
+        djangoat.DATA.update({
             'novels': Book.objects.filter(type='novel')
             'novels_by_authors': lambda authors: Book.objects.filter(type='novel', authors__in=authors)
-            'classic_novels': lambda: Book.objects.filter(type='novel', authors__in=DJANGOAT_DATA['classic_authors'])
+            'classic_novels': lambda: Book.objects.filter(type='novel', authors__in=djangoat.DATA['classic_authors'])
         })
 
     Because the ``classic_novels`` queryset exists within a function, it makes no difference when
-    :python:`DJANGOAT_DATA['classic_authors']` is added. As long as it is added somewhere along the line,
+    :python:`djangoat.DATA['classic_authors']` is added. As long as it is added somewhere along the line,
     so that it will be available when needed, we'll be able to retrieve these novels without issue. Using this
-    method, we can effectively chain together various queries within ``DJANGOAT_DATA``, which may in certain cases
+    method, we can effectively chain together various queries within ``djangoat.DATA``, which may in certain cases
     prove advantageous.
 
     The `data tag`_ can accept as many arguments as necessary, but for functions with fewer than two arguments, you
     may also use the `dataf filter`_  below, which operates on the same principle but uses filter syntax.
 
-    As for how various querysets and functions make their way into the ``DJANGOAT_DATA``, this is a matter of
+    As for how various querysets and functions make their way into the ``djangoat.DATA``, this is a matter of
     preference. Adding them at the bottom of an app's ``models.py`` file saves importing models but may result in
     circular imports in certain instances. You may instead consider making a ``data.py`` file for each app or a single
     file placed in the project root.
@@ -386,18 +375,18 @@ def data(context, key, *args):
 
     :param context: the template context
     :type context: dict
-    :param key: a key in ``DJANGOAT_DATA``; if ``key`` ends in ">", then we'll inject the corresponding value into
+    :param key: a key in ``djangoat.DATA``; if ``key`` ends in ">", then we'll inject the corresponding value into
         ``context`` under the name of this key
     :type key: str
-    :param args: arguments to pass to ``DJANGOAT_DATA[key]`` when its value is callable
-    :return: the value of :python:`DJANGOAT_DATA[key]` or, if the value is a callable, the result of the callable or,
+    :param args: arguments to pass to ``djangoat.DATA[key]`` when its value is callable
+    :return: the value of :python:`djangoat.DATA[key]` or, if the value is a callable, the result of the callable or,
         if ``key`` ends in ">", nothing, as the return value will be injected into ``context`` instead
     """
     inject = False
     if key[-1] == '>':
         inject = True
         key = key[:-1]
-    d = DJANGOAT_DATA[key]
+    d = DATA[key]
     v = d(*args) if callable(d) else d
     if inject:
         context[key] = v
@@ -525,10 +514,10 @@ class CacheFragNode(Node):
     https://github.com/django/django/blob/main/django/templatetags/cache.py
 
     Modifications have been made to enable the following:
-    * Accommodate user / site tags
+    * Accommodate user / site cache tags
     * Create CacheFrag records in the database
     * Keep CacheFrag ``date_set`` and ``duration`` fields up to date
-    * Make cache entries filterable and searchable in the admin based on user, site, and args
+    * Make cache entries filterable and searchable in the admin based on name, user, site, and args
     * Make cache entries clearable via their corresponding CacheFrag record
     * Enable clearing of all cache fragments encountered within the current request
     """
