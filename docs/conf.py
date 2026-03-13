@@ -45,11 +45,12 @@ rst_epilog = """
 .. _cache: models.html#djangoat.models.CacheFrag
 .. _cache tag: templatetags.html#djangoat.templatetags.djangoat.cachefrag
 .. _data tag: templatetags.html#djangoat.templatetags.djangoat.data
-.. _dataf filter: templatetags.html#djangoat.templatetags.djangoat.dataf
+.. _data filter: templatetags.html#djangoat.templatetags.djangoat.data
 .. _file: https://docs.djangoproject.com/en/dev/ref/files/file/#the-file-class
 .. _filefield: https://docs.djangoproject.com/en/dev/ref/models/fields/#filefield
 .. _get_csv_content: utils.html#djangoat.utils.get_csv_content
 .. _get_csv_rows_from_queryset: utils.html#djangoat.utils.get_csv_rows_from_queryset
+.. _get_data: utils.html#djangoat.utils.get_data
 .. _get_seconds_from_duration_string: utils.html#djangoat.utils.get_seconds_from_duration_string
 .. _jsonfield: https://docs.djangoproject.com/en/dev/topics/db/queries/#querying-jsonfield
 .. _requests api: https://github.com/psf/requests/blob/main/src/requests/api.py

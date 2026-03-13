@@ -17,8 +17,8 @@ class DjangoatMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        request.djangoat = Djangoat()
+        dg = request.djangoat = Djangoat()
         response = self.get_response(request)
-        if request.djangoat.cache_keys_set:
+        if dg.cache_keys_set:
             CacheFrag.objects.filter(key__in=request.djangoat.cache_keys_set).update(date_set=timezone.now())
         return response

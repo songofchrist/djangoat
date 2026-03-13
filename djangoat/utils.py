@@ -23,7 +23,7 @@ from django.core.files import File
 # from django.contrib.postgres.aggregates import StringAgg
 
 # from django.contrib.redirects.models import Redirect
-from django.db.models import F
+from django.db.models import F, QuerySet
 from django.http.response import HttpResponse
 from django.template import loader
 from django.utils.html import strip_tags
@@ -32,6 +32,8 @@ from django.utils.html import strip_tags
 # from django.urls.resolvers import URLPattern
 
 from djangoat.constants import REGEX_DURATION_STRING
+
+from . import DATA
 
 
 
@@ -387,6 +389,20 @@ def get_csv_rows_from_queryset(queryset, fields, derived_fields=None, dynamic_co
                         row.append('' if v is None else (m.get(v, v) if m else v))
                     rows.append(row + dcr.get(d.pk, []))
     return [headers + dch] + rows
+
+
+
+def get_data(key, *args):
+    """
+    A safe way to retrieve data in the ``djangoat.DATA`` dict.
+
+    :param key: the key of the data to retrieve from ``djangoat.DATA``
+    :param args: args to pass into a callable when the retrieved data is a callable
+    :return: the data corresponding to ``key``, the result of the callable, when the data is callable, or the
+        queryset, when the data is a queryset
+    """
+    d = DATA.get(key, None)
+    return d(*args) if callable(d) else (d.all() if isinstance(d, QuerySet) else d)
 
 
 

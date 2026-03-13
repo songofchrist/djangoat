@@ -12,7 +12,7 @@ from .. import (DATA, DJANGOAT_PAGER, DJANGOAT_THUMB_GET_URL, DJANGOAT_THUMB_TYP
                 DJANGOAT_THUMB_TYPE_URLS)
 
 from ..models import CACHE_FRAG_KEYS, CacheFrag
-from ..utils import get_seconds_from_duration_string
+from ..utils import get_data, get_seconds_from_duration_string
 
 register = Library()
 
@@ -20,20 +20,19 @@ register = Library()
 
 # FILTERS
 @register.filter
-def dataf(key, arg=None):
-    """Retrieves the value of ``djangoat.DATA[key]`` or, if the value is a callable, the result of the callable.
+def data(key, arg=None):
+    """Retrieves the output of `get_data`_ for ``djangoat.DATA[key]``
 
     The logic behind this filter is the same as that for the ``data`` tag. The only difference is that, because this
-    is a filter, it is limited to at most one argument. But also because it is a filter, it can be included directly
+    is a filter, it's limited to at most one argument. But also because it's a filter, it can be included directly
     in for loops or chained directly to other filters, which may prove more convenient in certain cases. See the
-    `data <#djangoat.templatetags.djangoat.data>`__ tag for more on the theory behind this filter.
+    `data tag`_ for more on the theory behind this filter.
 
     :param key: a key in ``djangoat.DATA``
-    :param arg: an argument to pass to the function referenced by ``djangoat.DATA[key]``
-    :return: the value of ``djangoat.DATA[key]`` or, if the value is a callable, the result of the callable
+    :param arg: an argument to pass to the function referenced by ``djangoat.DATA[key]`` (otherwise, it's ignored)
+    :return: the output of `get_data`_ for ``djangoat.DATA[key]``
     """
-    d = DATA[key]
-    return (d(arg) if arg else d()) if callable(d) else d
+    return get_data(key, *([arg] if arg else []))
 
 
 
@@ -268,7 +267,7 @@ def call_method(obj, method, *args):
 
 @register.simple_tag(takes_context=True)
 def data(context, key, *args):
-    """Retrieves the value of :python:`djangoat.DATA[key]` or, if the value is a callable, the result of the callable.
+    """Retrieves the output of `get_data`_ for ``djangoat.DATA[key]`` and either displays it or injects it into context.
 
     To understand the usefulness of this template tag, we first need to understand the problem it solves. Suppose we
     use the queryset below in a number of different views throughout our site.
@@ -285,24 +284,29 @@ def data(context, key, *args):
 
     But each of these approaches comes with disadvantages:
 
-    1. Including the queryset in every view means repetitive imports, potential for inconsistency from one view to the next in more complex queries, and wasted processing when the queryset doesn't actually get used.
-    2. Including it in context processors circumvents the issues of the first approach but requires rebuilding the queryset on every page load, whether it is used or not, and this adds up when one has hundreds of such queries.
-    3. Query-specific template tags address both of these issues, but this approach multiplies template tags unnecessarily and requires us to remember where each tag is located and how to load it, making it less than ideal.
+    1. Including the queryset in every view means repetitive imports, potential for inconsistency from one view to
+       the next in more complex queries, and wasted processing when the queryset doesn't actually get used.
+    2. Including it in context processors circumvents the issues of the first approach but requires rebuilding the
+       queryset on every page load, whether it is used or not, and this adds up when we have hundreds of such queries.
+    3. Query-specific template tags address both of these issues, but this approach multiplies template tags
+       unnecessarily and requires us to remember where each tag is located and how to load it, making it less than
+       ideal.
 
-    This template tag solves all of these issues by consolidating all such querysets into a single dict, which is
-    formed once upon restart and reused thereafter only when actually called by this tag. To make the queryset above
-    universally accessible to all templates without the need to rebuild it on every request, we might place the
-    following in the file where the Book model is declared:
+    This template tag solves all of these issues by consolidating all such querysets into a single, globally
+    accessible dict, which is formed once upon restart and reused thereafter only when actually called by this tag.
+    To make the queryset above universally accessible to all templates without the need to rebuild it on every
+    request, we might place the following in the file where the Book model is declared:
 
     ..  code-block:: python
 
-        from djangoat import djangoat.DATA
+        from djangoat import DATA
 
         class Book(models.Model):
             . . .
 
-        djangoat.DATA.update({
+        DATA.update({
             'novels': Book.objects.filter(type='novel')
+            'novels_safe': lambda: Book.objects.filter(type='novel')
         })
 
     To access this within a template, we might do one of the following:
@@ -312,23 +316,27 @@ def data(context, key, *args):
         {% load djangoat %}
 
         {% data 'novels' %}
-        {% data 'novels' as good_books %}
+        {% data 'novels' as novels %}
         {% data 'novels>' %}
 
     The first of these will dump the queryset directly into the template as-is. The next will store the queryset in
-    the ``good_books`` variable. And the last will inject the queryset into context under the name of its key,
-    "novels".
+    the ``novels`` variable, so it can be referenced elsewhere in the template. And the last, which appends ">" to
+    the end of the key, is a shorthand for the previous example and results in output being injected into context
+    under the name of the preceding key, here "novels".
 
-    But what if we have several authors stored in an ``authors`` variable and want to retrieve only novels by those
-    authors. In this case, we'd need to store the query as a lambda function, which will only evaluate when called.
-    This and any other queryset which would evaluate, such as those that call ``first()`` or ``count()``, **should be
-    couched in a lambda function**, so that they can be reused. For example, in the models file, we might update the
-    code as follows:
+    Note that, because "novels" here is a queryset, its results will be cached with every call and stored in memory
+    until the next call, which may start eating up memory when we're dealing with large querysets. To avoid this,
+    we'll place the queryset within a lamda function, as seen in "novels_safe" above. To ensure no side effects,
+    we'll use this form for "novels" going forward.
+
+    Now what if we have several authors stored in an ``authors`` variable and want to retrieve only novels by those
+    authors. In this case, we'd need to provide an ``authors`` argument for our lambda function, so that we can pass
+    this to the queryset. For example, we might update the code as follows:
 
     ..  code-block:: python
 
-        djangoat.DATA.update({
-            'novels': Book.objects.filter(type='novel')
+        DATA.update({
+            'novels': lambda: Book.objects.filter(type='novel')
             'novels_by_authors': lambda authors: Book.objects.filter(type='novel', authors__in=authors)
         })
 
@@ -339,55 +347,80 @@ def data(context, key, *args):
         {% load djangoat %}
 
         {% data 'novels_by_authors' authors %}
-        {% data 'novels_by_authors' authors as good_books %}
+        {% data 'novels_by_authors' authors as novels_by_authors %}
         {% data 'novels_by_authors>' authors %}
 
-    This approach has all of the advantages of registering a separate template tag for every unique queryset or
-    callable, but with a lot less headache.
+    This would inject results into the template directly or, in the latter two cases, assign results to a
+    "novels_by_authors" variable. This approach has all of the advantages of registering a separate template tag
+    for every unique queryset or callable, but with a lot less headache.
 
-    But what if we want to make use of one value in ``djangoat.DATA`` within another? To do this, we'd do something
+    But what if we want to reference one value in ``djangoat.DATA`` within another? To do this, we'd do something
     like the following:
 
     ..  code-block:: python
 
-        djangoat.DATA.update({
+        from djangoat.utils import get_data
+
+        DATA.update({
             'novels': Book.objects.filter(type='novel')
             'novels_by_authors': lambda authors: Book.objects.filter(type='novel', authors__in=authors)
-            'classic_novels': lambda: Book.objects.filter(type='novel', authors__in=djangoat.DATA['classic_authors'])
+            'novels_by_authors_alt': lambda authors: get_data('novels').filter(authors__in=authors)
         })
 
-    Because the ``classic_novels`` queryset exists within a function, it makes no difference when
-    :python:`djangoat.DATA['classic_authors']` is added. As long as it is added somewhere along the line,
-    so that it will be available when needed, we'll be able to retrieve these novels without issue. Using this
-    method, we can effectively chain together various queries within ``djangoat.DATA``, which may in certain cases
-    prove advantageous.
+    Here we see that "novels_by_authors_alt" builds upon "novels" by using the `get_data`_ function to retrieve the
+    value of the "novels" queryset and then applying an "authors" filter to it before rendering its output. This
+    allows us to chain things together, reducing repetition of code. Note that the value referenced by `get_data`_
+    can be any key in DATA referenced throughout our project. As long as it's registered somewhere, it's permissible.
+    This is especially helpful in alleviating concerns over circular imports.
 
-    The `data tag`_ can accept as many arguments as necessary, but for functions with fewer than two arguments, you
-    may also use the `dataf filter`_  below, which operates on the same principle but uses filter syntax.
+    This tag will prove especially useful in the context of template caching. For example, consider the following:
+
+    ..  code-block:: django
+
+        <p>Uncached material.</p>
+        {% cache 123 test %}
+            {% data 'novels_by_authors>' 'authors'|data %}
+            {% for novel in novels_by_authors %}
+                {{ novel.title }} by {{ novel.author }}<br>
+            {% endfor %}
+        {% endcache %}
+
+    We see here a call to the data tag, whose output we expect to injected into context under the variable name
+    "novels_by_authors". The corresponding function in DATA requires an ``authors`` argument, which we retrieve via
+    a call to ``'authors'|data``, which we'll assume is elsewhere specified and returns authors instances. We then
+    process this data via a loop. The results are then cached. The next time this page is hit, it populates from
+    the cache, so these querysets never have to be built. And when we do need them, we can call them directly from
+    the template, keeping the associated view that much cleaner.
+
+    Note that the `data tag`_ can accept as many arguments as necessary, but for functions with fewer than two
+    arguments, you may also use the `data filter`_, which operates the same in principle but uses filter syntax to
+    retrieve output.
 
     As for how various querysets and functions make their way into the ``djangoat.DATA``, this is a matter of
     preference. Adding them at the bottom of an app's ``models.py`` file saves importing models but may result in
-    circular imports in certain instances. You may instead consider making a ``data.py`` file for each app or a single
-    file placed in the project root.
+    circular imports in certain instances where different apps' DATA entries need to reference each other's models.
+    You may instead consider making a single ``data.py`` file alongside project settings, so that any models
+    needed in entries can be imported without danger of circular imports.
 
-    In summary, this tag represents a way of thinking that results in a particular process. If this process agrees with
-    you, the tag may save you a good deal of hassle.
+    In summary, this tag is intended to do the following:
+    * Encourage centralization of commonly used data into a single DATA dict
+    * Make this data globally available throughout the project via the `get_data`_ function` (used by tags to
+      retrieve data)
+    * Provide a way of injecting this data directly into templates, so that it's only accessed when needed
 
     :param context: the template context
     :type context: dict
     :param key: a key in ``djangoat.DATA``; if ``key`` ends in ">", then we'll inject the corresponding value into
         ``context`` under the name of this key
     :type key: str
-    :param args: arguments to pass to ``djangoat.DATA[key]`` when its value is callable
-    :return: the value of :python:`djangoat.DATA[key]` or, if the value is a callable, the result of the callable or,
-        if ``key`` ends in ">", nothing, as the return value will be injected into ``context`` instead
+    :param args: arguments to pass to ``djangoat.DATA[key]`` when its value is callable (otherwise, it's ignored)
+    :return: the output of `get_data`_ for ``djangoat.DATA[key]`` or an empty string when a variable is specified
     """
     inject = False
     if key[-1] == '>':
         inject = True
         key = key[:-1]
-    d = DATA[key]
-    v = d(*args) if callable(d) else d
+    v = get_data(key, *args)
     if inject:
         context[key] = v
         return ''

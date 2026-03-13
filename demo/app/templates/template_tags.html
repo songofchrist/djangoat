@@ -12,91 +12,106 @@
   <br><br>
 
   <h1>Filters</h1>
-  <h2 class="func"><a id="dataf" class="func">dataf</a></h2>
-  <div>{% verbatim %}{{ KEY|dataf:ARG }}{% endverbatim %}</div>
-  <p>Here we have several examples of calls to the filter version of the ``data`` tag. This filter uses KEY to pull
-    from the same DATA dict, accepting at most one argument, and outputs the result. Consider the following functions:
-    <ul>
-      <li><b>DATA['now']</b>: returns the current time</li>
-      <li><b>DATA['cube_func']</b>: cubes ARG</li>
-      <li><b>DATA['result_func']</b>: creates a range with a length of ARG</li>
-    </ul>
-  </p>
-  <table class="examples">
-    <tr>
-      <td><pre><code class="language-django">{% verbatim %}{{ 'now'|dataf }}{% endverbatim %}</code></pre></td>
-      <td class="hljs hljs-string">{{ 'now'|dataf }}</td>
-    </tr>
-    <tr>
-      <td><pre><code class="language-django">{% verbatim %}{{ 'now'|dataf|date:DATE_FORMAT }}{% endverbatim %}</code></pre></td>
-      <td class="hljs hljs-string">{{ 'now'|dataf|date:DATE_FORMAT }}</td>
-    </tr>
-    <tr>
-      <td><pre><code class="language-django">{% verbatim %}{{ 'cube_func'|dataf:2 }}{% endverbatim %}</code></pre></td>
-      <td class="hljs hljs-string">{{ 'cube_func'|dataf:2 }}</td>
-    </tr>
-    <tr>
-      <td><pre><code class="language-django">{% verbatim %}{% for r in 'result_func'|dataf:5 %}{{ r }}! {% endfor %}{% endverbatim %}</code></pre></td>
-      <td class="hljs hljs-string">{% for r in 'result_func'|dataf:5 %}{{ r }}! {% endfor %}</td>
-    </tr>
-  </table>
-  <br><br>
+  <div class="func">
+    <h2><a id="dataf">data</a></h2>
+    <div>{% verbatim %}{{ KEY|data:ARG }}{% endverbatim %}</div>
+    <p>Here we have several examples of calls to the filter version of the ``data`` tag. This filter uses KEY to pull
+      from Djangoat's DATA dict, accepting at most one argument, and outputs the result. Consider the examples below
+      in light of following functions:
+      <ul>
+        <li><b>DATA['now']</b>: returns the current time</li>
+        <li><b>DATA['cube_func']</b>: cubes ARG</li>
+        <li><b>DATA['result_func']</b>: creates a range with a length of ARG</li>
+      </ul>
+    </p>
+    <table class="examples">
+      <tr>
+        <td><pre><code class="language-django">{% verbatim %}{{ 'now'|data }}{% endverbatim %}</code></pre></td>
+        <td class="hljs hljs-string">{{ 'now'|data }}</td>
+      </tr>
+      <tr>
+        <td><pre><code class="language-django">{% verbatim %}{{ 'now'|data|date:DATE_FORMAT }}{% endverbatim %}</code></pre></td>
+        <td class="hljs hljs-string">{{ 'now'|data|date:DATE_FORMAT }}</td>
+      </tr>
+      <tr>
+        <td><pre><code class="language-django">{% verbatim %}{{ 'cube_func'|data:2 }}{% endverbatim %}</code></pre></td>
+        <td class="hljs hljs-string">{{ 'cube_func'|data:2 }}</td>
+      </tr>
+      <tr>
+        <td><pre><code class="language-django">{% verbatim %}{% for r in 'result_func'|data:5 %}{{ r }}! {% endfor %}{% endverbatim %}</code></pre></td>
+        <td class="hljs hljs-string">{% for r in 'result_func'|data:5 %}{{ r }}! {% endfor %}</td>
+      </tr>
+    </table>
+  </div>
 
-  <h2 class="func"><a id="get">get</a></h2>
-  <div>{% verbatim %}{{ DICT|get:KEY }}{% endverbatim %}</div>
-  <p>The following assumes a <span class="mono">variable_key</span> of "two".</p>
-  <table class="examples">{% with variable_key='two' %}
-    <tr>
-      <td><pre><code class="language-django">{% verbatim %}{{ NUM_DICT.two }} != {{ NUM_DICT.variable_key }}{% endverbatim %}</code></pre></td>
-      <td class="hljs hljs-string">{{ NUM_DICT.two }} != {{ NUM_DICT.variable_key }}</td>
-    </tr>
-    <tr>
-      <td><pre><code class="language-django">{% verbatim %}{{ NUM_DICT.two }} == {{ NUM_DICT|get:variable_key }}{% endverbatim %}</code></pre></td>
-      <td class="hljs hljs-string">{{ NUM_DICT.two }} == {{ NUM_DICT|get:variable_key }}</td>
-    </tr>
-  {% endwith %}</table>
-  <br><br><br>
+  <div class="func">
+    <h2><a id="get">get</a></h2>
+    <div>{% verbatim %}{{ DICT|get:KEY }}{% endverbatim %}</div>
+    <p>The following assumes a <span class="mono">variable_key</span> of "two".</p>
+    <table class="examples">{% with variable_key='two' %}
+      <tr>
+        <td><pre><code class="language-django">{% verbatim %}{{ NUM_DICT.two }} != {{ NUM_DICT.variable_key }}{% endverbatim %}</code></pre></td>
+        <td class="hljs hljs-string">{{ NUM_DICT.two }} != {{ NUM_DICT.variable_key }}</td>
+      </tr>
+      <tr>
+        <td><pre><code class="language-django">{% verbatim %}{{ NUM_DICT.two }} == {{ NUM_DICT|get:variable_key }}{% endverbatim %}</code></pre></td>
+        <td class="hljs hljs-string">{{ NUM_DICT.two }} == {{ NUM_DICT|get:variable_key }}</td>
+      </tr>
+    {% endwith %}</table>
+  </div>
 
   <h1>Tags</h1>
-  <h2 class="func"><a id="cache">cache</a>, <a id="usercache">usercache</a>, <a id="sitecache">sitecache</a>, <a id="usersitecache">usersitecache</a></h2>
-  <div>{% verbatim %}
-    {% cache TIME NAME ARG1 ARG2 . . . %}Cached Content{% endcache %}<br>
-    {% usercache TIME NAME ARG1 ARG2 . . . %}Cached Authenticated User Content{% endusercache %}<br>
-    {% sitecache TIME NAME ARG1 ARG2 . . . %}Cached Current Site Content{% endsitecache %}<br>
-    {% usersitecache TIME NAME ARG1 ARG2 . . . %}Cached Authenticaed User Content For The Current Site{% endusersitecache %}<br>
-  {% endverbatim %}</div>
-  <p>Here we see calls to the cache tag and its variants with the resulting cached content. To clear these
-    individually or all at once, visit the <a href="/admin/djangoat/cachefrag/" target="_blank">CacheFrag admin area</a>,
-    select the fragments to clear, and select "Clear selected Cache Fragments" from the dropdown. They should update
-    on the next page load.</p>
-  <table class="examples">
-    <tr>
-      <td><pre><code class="language-django">{% verbatim %}{% cache None cache_test_always %}{{ now|date:TIME_FORMAT }}{% endcache %}{% endverbatim %}</code></pre></td>
-      <td class="hljs hljs-string">{% cache None cache_test_always %}{{ now|date:TIME_FORMAT }}{% endcache %}</td>
-    </tr>
-    <tr>
-      <td><pre><code class="language-django">{% verbatim %}{% cache 1234 cache_test_seconds %}{{ now|date:TIME_FORMAT }}{% endcache %}{% endverbatim %}</code></pre></td>
-      <td class="hljs hljs-string">{% cache 1234 cache_test_seconds %}{{ now|date:TIME_FORMAT }}{% endcache %}</td>
-    </tr>
-    <tr>
-      <td><pre><code class="language-django">{% verbatim %}{% cache '2h30m' cache_test_duration_string %}{{ now|date:TIME_FORMAT }}{% endcache %}{% endverbatim %}</code></pre></td>
-      <td class="hljs hljs-string">{% cache '2h30m' cache_test_duration_string %}{{ now|date:TIME_FORMAT }}{% endcache %}</td>
-    </tr>
-    <tr>
-      <td><pre><code class="language-django">{% verbatim %}{% cache '2h30m' cache_test_args 123 'string' %}{{ now|date:TIME_FORMAT }}{% endcache %}{% endverbatim %}</code></pre></td>
-      <td class="hljs hljs-string">{% cache '2h30m' cache_test_args 123 'string' %}{{ now|date:TIME_FORMAT }}{% endcache %}</td>
-    </tr>
-    <tr>
-      <td><pre><code class="language-django">{% verbatim %}{% usercache '2h30m' cache_test_user 123 'string' %}{{ now|date:TIME_FORMAT }}{% endusercache %}{% endverbatim %}</code></pre></td>
-      <td class="hljs hljs-string">{% usercache '2h30m' cache_test_user  123 'string' %}{{ now|date:TIME_FORMAT }}{% endusercache %}</td>
-    </tr>
-    <tr>
-      <td><pre><code class="language-django">{% verbatim %}{% sitecache '2h30m' cache_test_site 123 'string' %}{{ now|date:TIME_FORMAT }}{% endsitecache %}{% endverbatim %}</code></pre></td>
-      <td class="hljs hljs-string">{% sitecache '2h30m' cache_test_site  123 'string' %}{{ now|date:TIME_FORMAT }}{% endsitecache %}</td>
-    </tr>
-    <tr>
-      <td><pre><code class="language-django">{% verbatim %}{% usersitecache '2h30m' cache_test_usersite 123 'string' %}{{ now|date:TIME_FORMAT }}{% endusersitecache %}{% endverbatim %}</code></pre></td>
-      <td class="hljs hljs-string">{% usersitecache '2h30m' cache_test_usersite  123 'string' %}{{ now|date:TIME_FORMAT }}{% endusersitecache %}</td>
-    </tr>
-  </table>
+  <div class="func">
+    <h2><a id="data">data</a></h2>
+    <div>{% verbatim %}
+      {% data TIME NAME ARG1 ARG2 . . . %}Cached Content{% endcache %}<br>
+      {% usercache TIME NAME ARG1 ARG2 . . . %}Cached Authenticated User Content{% endusercache %}<br>
+      {% sitecache TIME NAME ARG1 ARG2 . . . %}Cached Current Site Content{% endsitecache %}<br>
+      {% usersitecache TIME NAME ARG1 ARG2 . . . %}Cached Authenticated User Content For The Current Site{% endusersitecache %}<br>
+    {% endverbatim %}</div>
+  </div>
+
+  <div class="func">
+    <h2><a id="cache">cache</a>, <a id="usercache">usercache</a>, <a id="sitecache">sitecache</a>, <a id="usersitecache">usersitecache</a></h2>
+    <div>{% verbatim %}
+      {% cache TIME NAME ARG1 ARG2 . . . %}Cached Content{% endcache %}<br>
+      {% usercache TIME NAME ARG1 ARG2 . . . %}Cached Authenticated User Content{% endusercache %}<br>
+      {% sitecache TIME NAME ARG1 ARG2 . . . %}Cached Current Site Content{% endsitecache %}<br>
+      {% usersitecache TIME NAME ARG1 ARG2 . . . %}Cached Authenticated User Content For The Current Site{% endusersitecache %}<br>
+    {% endverbatim %}</div>
+    <p>Here we see calls to the cache tag and its variants with the resulting cached content. To clear these
+      individually or all at once, visit the <a href="/admin/djangoat/cachefrag/" target="_blank">CacheFrag admin area</a>,
+      select the fragments to clear, and select "Clear selected Cache Fragments" from the dropdown. They should update
+      on the next page load.</p>
+    <table class="examples">
+      <tr>
+        <td><pre><code class="language-django">{% verbatim %}{% cache None cache_test_always %}{{ now|date:TIME_FORMAT }}{% endcache %}{% endverbatim %}</code></pre></td>
+        <td class="hljs hljs-string">{% cache None cache_test_always %}{{ now|date:TIME_FORMAT }}{% endcache %}</td>
+      </tr>
+      <tr>
+        <td><pre><code class="language-django">{% verbatim %}{% cache 1234 cache_test_seconds %}{{ now|date:TIME_FORMAT }}{% endcache %}{% endverbatim %}</code></pre></td>
+        <td class="hljs hljs-string">{% cache 1234 cache_test_seconds %}{{ now|date:TIME_FORMAT }}{% endcache %}</td>
+      </tr>
+      <tr>
+        <td><pre><code class="language-django">{% verbatim %}{% cache '2h30m' cache_test_duration_string %}{{ now|date:TIME_FORMAT }}{% endcache %}{% endverbatim %}</code></pre></td>
+        <td class="hljs hljs-string">{% cache '2h30m' cache_test_duration_string %}{{ now|date:TIME_FORMAT }}{% endcache %}</td>
+      </tr>
+      <tr>
+        <td><pre><code class="language-django">{% verbatim %}{% cache '2h30m' cache_test_args 123 'string' %}{{ now|date:TIME_FORMAT }}{% endcache %}{% endverbatim %}</code></pre></td>
+        <td class="hljs hljs-string">{% cache '2h30m' cache_test_args 123 'string' %}{{ now|date:TIME_FORMAT }}{% endcache %}</td>
+      </tr>
+      <tr>
+        <td><pre><code class="language-django">{% verbatim %}{% usercache '2h30m' cache_test_user 123 'string' %}{{ now|date:TIME_FORMAT }}{% endusercache %}{% endverbatim %}</code></pre></td>
+        <td class="hljs hljs-string">{% usercache '2h30m' cache_test_user  123 'string' %}{{ now|date:TIME_FORMAT }}{% endusercache %}</td>
+      </tr>
+      <tr>
+        <td><pre><code class="language-django">{% verbatim %}{% sitecache '2h30m' cache_test_site 123 'string' %}{{ now|date:TIME_FORMAT }}{% endsitecache %}{% endverbatim %}</code></pre></td>
+        <td class="hljs hljs-string">{% sitecache '2h30m' cache_test_site  123 'string' %}{{ now|date:TIME_FORMAT }}{% endsitecache %}</td>
+      </tr>
+      <tr>
+        <td><pre><code class="language-django">{% verbatim %}{% usersitecache '2h30m' cache_test_usersite 123 'string' %}{{ now|date:TIME_FORMAT }}{% endusersitecache %}{% endverbatim %}</code></pre></td>
+        <td class="hljs hljs-string">{% usersitecache '2h30m' cache_test_usersite  123 'string' %}{{ now|date:TIME_FORMAT }}{% endusersitecache %}</td>
+      </tr>
+    </table>
+  </div>
 {% endblock %}
