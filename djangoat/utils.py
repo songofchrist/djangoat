@@ -394,14 +394,17 @@ def get_csv_rows_from_queryset(queryset, fields, derived_fields=None, dynamic_co
 
 def get_data(key, *args):
     """
-    A safe way to retrieve data in the ``djangoat.DATA`` dict.
+    A safe way to retrieve data from the ``djangoat.DATA`` dict.
 
     :param key: the key of the data to retrieve from ``djangoat.DATA``
     :param args: args to pass into a callable when the retrieved data is a callable
     :return: the data corresponding to ``key``, the result of the callable, when the data is callable, or the
         queryset, when the data is a queryset
     """
-    d = DATA.get(key, None)
+    try:
+        d = DATA[key]
+    except:
+        raise KeyError(f'The key "{key}" does not exist in djangoat.DATA')
     return d(*args) if callable(d) else (d.all() if isinstance(d, QuerySet) else d)
 
 

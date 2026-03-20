@@ -34,7 +34,8 @@ def add_example_table(ctx, func, *args):
 def template_tags(request):
     DATA.update({
         'cube_func': lambda x: x ** 3,
-        'result_func': lambda x: range(x)
+        'power_func': lambda x, y: x ** y,
+        'range_func': lambda x: range(x)
     })
 
 

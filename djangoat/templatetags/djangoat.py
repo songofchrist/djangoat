@@ -568,7 +568,7 @@ class CacheFragNode(Node):
         site_id = user_id = value = None
         try:
             request = context['request']
-        except Exception:
+        except:
             raise KeyError('"%s" tag requires the "request" object to be included in template context' % self.tag)
         if self.user:  # the usercache or usersitecache tag
             user_id = request.user.id
@@ -577,7 +577,7 @@ class CacheFragNode(Node):
         if self.site:  # the sitecache or usersitecache tag
             try:
                 site_id = settings.SITE_ID
-            except Exception:
+            except:
                 raise AttributeError('"%s" tag requires Django\'s Sites framework to be installed' % self.tag)
         try:  # retrieve and save the string representation of the desired duration
             duration = expire_time = self.expire_time_var.resolve(context)

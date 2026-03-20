@@ -15,13 +15,13 @@
   <div class="func">
     <h2><a id="dataf">data</a></h2>
     <div>{% verbatim %}{{ KEY|data:ARG }}{% endverbatim %}</div>
-    <p>Here we have several examples of calls to the filter version of the ``data`` tag. This filter uses KEY to pull
-      from Djangoat's DATA dict, accepting at most one argument, and outputs the result. Consider the examples below
-      in light of following functions:
+    <p>Here we have the filter version of the `_data tag`_. This filter uses KEY to pull from Djangoat's DATA dict,
+      accepting at most one argument, and outputs the result. Consider the examples below in light of following
+      functions:
       <ul>
         <li><b>DATA['now']</b>: returns the current time</li>
         <li><b>DATA['cube_func']</b>: cubes ARG</li>
-        <li><b>DATA['result_func']</b>: creates a range with a length of ARG</li>
+        <li><b>DATA['range_func']</b>: creates a range with a length of ARG</li>
       </ul>
     </p>
     <table class="examples">
@@ -38,8 +38,8 @@
         <td class="hljs hljs-string">{{ 'cube_func'|data:2 }}</td>
       </tr>
       <tr>
-        <td><pre><code class="language-django">{% verbatim %}{% for r in 'result_func'|data:5 %}{{ r }}! {% endfor %}{% endverbatim %}</code></pre></td>
-        <td class="hljs hljs-string">{% for r in 'result_func'|data:5 %}{{ r }}! {% endfor %}</td>
+        <td><pre><code class="language-django">{% verbatim %}{% for r in 'range_func'|data:5 %}{{ r }}! {% endfor %}{% endverbatim %}</code></pre></td>
+        <td class="hljs hljs-string">{% for r in 'range_func'|data:5 %}{{ r }}! {% endfor %}</td>
       </tr>
     </table>
   </div>
@@ -63,12 +63,33 @@
   <h1>Tags</h1>
   <div class="func">
     <h2><a id="data">data</a></h2>
-    <div>{% verbatim %}
-      {% data TIME NAME ARG1 ARG2 . . . %}Cached Content{% endcache %}<br>
-      {% usercache TIME NAME ARG1 ARG2 . . . %}Cached Authenticated User Content{% endusercache %}<br>
-      {% sitecache TIME NAME ARG1 ARG2 . . . %}Cached Current Site Content{% endsitecache %}<br>
-      {% usersitecache TIME NAME ARG1 ARG2 . . . %}Cached Authenticated User Content For The Current Site{% endusersitecache %}<br>
-    {% endverbatim %}</div>
+    <div>{% verbatim %}{% data KEY ARG1 ARG2 ARG3 . . . %}{% endverbatim %}</div>
+    <p>Here we have the tag version of `_data filter`_. This tag uses KEY to pull from Djangoat's DATA dict and is
+      required when accessing a function that requires more than a single argument. Consider the examples below in
+      light of following functions:
+      <ul>
+        <li><b>DATA['now']</b>: returns the current time</li>
+        <li><b>DATA['power_func']</b>: takes ARG1 to the power of ARG2</li>
+      </ul>
+    </p>
+    <table class="examples">
+      <tr>
+        <td><pre><code class="language-django">{% verbatim %}{% data 'now' %}{% endverbatim %}</code></pre></td>
+        <td class="hljs hljs-string">{% data 'now' %}</td>
+      </tr>
+      <tr>
+        <td><pre><code class="language-django">{% verbatim %}{% data 'now' as now %}{{ now|date:DATE_FORMAT }}{% endverbatim %}</code></pre></td>
+        <td class="hljs hljs-string">{% data 'now' as now %}{{ now|date:DATE_FORMAT }}</td>
+      </tr>
+      <tr>
+        <td><pre><code class="language-django">{% verbatim %}{% data 'now>' %}{{ now|date:DATE_FORMAT }}{% endverbatim %}</code></pre></td>
+        <td class="hljs hljs-string">{% data 'now>' %}{{ now|date:DATE_FORMAT }}</td>
+      </tr>
+      <tr>
+        <td><pre><code class="language-django">{% verbatim %}{% data 'power_func' 3 4 %}{% endverbatim %}</code></pre></td>
+        <td class="hljs hljs-string">{% data 'power_func' 3 4 %}</td>
+      </tr>
+    </table>
   </div>
 
   <div class="func">
