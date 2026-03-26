@@ -8,7 +8,7 @@ from django.template import Library, Node, TemplateSyntaxError, VariableDoesNotE
 from django.utils import timezone
 from django.utils.safestring import mark_safe
 
-from .. import (DATA, DJANGOAT_PAGER, DJANGOAT_THUMB_GET_URL, DJANGOAT_THUMB_TYPE_HTML,
+from .. import (DATA, PAGER, DJANGOAT_THUMB_GET_URL, DJANGOAT_THUMB_TYPE_HTML,
                 DJANGOAT_THUMB_TYPE_URLS)
 
 from ..models import CACHE_FRAG_KEYS, CacheFrag
@@ -29,7 +29,7 @@ def data(key, arg=None):
     `data tag`_ for more on the theory behind this filter.
 
     :param key: a key in ``djangoat.DATA``
-    :param arg: an argument to pass to the function referenced by ``djangoat.DATA[key]`` (otherwise, it's ignored)
+    :param arg: an argument to punauthenticatedass to the function referenced by ``djangoat.DATA[key]`` (otherwise, it's ignored)
     :return: the output of `get_data`_ for ``djangoat.DATA[key]``
     """
     return get_data(key, *([arg] if arg else []))
@@ -431,12 +431,12 @@ def data(context, key, *args):
 @register.simple_tag(takes_context=True)
 def pager(context,
           queryset,
-          items_per_page=DJANGOAT_PAGER['items_per_page'],
-          plus_or_minus=DJANGOAT_PAGER['plus_or_minus']):
+          items_per_page=PAGER['items_per_page'],
+          plus_or_minus=PAGER['plus_or_minus']):
     """Returns a widget and queryset based on the current page.
 
     Suppose we have a queryset ``books``. To enable paging on these objects we would begin by invoking this template
-    tag somewhere prior to the display of our book records.
+    tag somewhere just prior to the display of our book records.
 
     ..  code-block:: django
 
@@ -446,9 +446,9 @@ def pager(context,
     and inject the following variables into the template context:
 
     - ``pager_queryset``: the provided queryset, sliced according to the current page
-    - ``pager_start``: the number of the starting record of ``pager_queryset``
-    - ``pager_end``: the number of the ending record of ``pager_queryset``
-    - ``pager_total``: the total number of records
+    - ``pager_start``: the index of the starting record of ``pager_queryset``
+    - ``pager_end``: the index of the ending record of ``pager_queryset``
+    - ``pager_total``: the total number of records in this queryset
     - ``pager``: a widget for navigating pages
 
     We would then display our book records and the paging widget. A list page template might look something like the
@@ -460,80 +460,87 @@ def pager(context,
         <h1>Books To Read</h1>
         <hr>
         {% for book in pager_queryset %}
-            <p><a href="{{ book.get_relative_url }}">{{ book.title }}</a></p>
+          <p><a href="{{ book.get_relative_url }}">{{ book.title }}</a></p>
         {% endfor %}
         <hr>
         {{ pager }}
 
-    Widget defaults are available in ``djangoat.DJANGOAT_PAGER`` and may be altered by updating this dict, which
+    Widget defaults are available in ``djangoat.PAGER`` and may be altered by updating this dict, which
     takes the form below:
 
     ..  code-block:: python
 
-        DJANGOAT_PAGER = {
-            'items_per_page': 20,
-            'next_text': 'Next »',
-            'param': 'page',
-            'plus_or_minus': 3,
-            'prev_text': '« Prev',
+        PAGER = {
+            'items_per_page': 20,   # the number of items to show on each page
+            'next_text': 'Next »',  # text prompting the user to go to the next page
+            'param': 'page',        # the query string parameter containing the current page
+            'plus_or_minus': 3,     # how many page links to display to the left and right of the current page
+            'prev_text': '« Prev',  # text prompting the user to go to the previous page
+            'throttle_at': None     # remove page links beyond this page number to discourage crawling older material
         }
 
     Note that this tag relies on the current request object being present in the template context to retrieve the
     current page from the query string, so be sure to include this in context on any pages where pager is used.
 
     :param context: the template context
-    :type context: dict
     :param queryset: the queryset through which to page
-    :param items_per_page: items to show per page
-    :type items_per_page: int
-    :param plus_or_minus: how many links to display on either side of the current page
-    :type plus_or_minus: int
+    :param items_per_page: items to show per page (defaults to 20)
+    :param plus_or_minus: how many links to display on either side of the current page (defaults to 3)
     """
-    qp = DJANGOAT_PAGER['param']
+    param = PAGER['param']
+    throttle_at = PAGER['throttle_at']
     g = context['request'].GET
-    cqs = '&'.join([f'{k}={g[k]}' for k in g.keys() if k != qp])  # the current query string, excluding the page param
+    cqs = '&'.join([f'{k}={g[k]}' for k in g.keys() if k != param])  # the current query string, excluding the page param
     if cqs:
         cqs += '&'
     try:
-        p = int(g.get(qp, 1))
+        page = int(g.get(param, 1))
+        if page < 1:
+            page = 1
     except:
-        p = 1
-    if p < 1:
-        p = 1
-    t = queryset.count()
-    pt = math.ceil(t / items_per_page)
-    ps = (p - 1) * items_per_page
-    pe = p * items_per_page
-    if pe > t:
-        pe = t
+        page = 1
+    total_items = queryset.count()
+    total_pages = math.ceil(total_items / items_per_page)
+    items_start = (page - 1) * items_per_page + 1
+    items_end = page * items_per_page
+    if items_end > total_items:
+        items_end = total_items
 
     # Build the widget
-    w = []
-    if p > 1:
-        w.append(f'<a href="?{cqs}{qp}={p - 1}">{DJANGOAT_PAGER["prev_text"]}</a>')
-    rl = p - plus_or_minus
-    ru = p + plus_or_minus
-    if rl > 1:
-        w.append(f'<a href="?{cqs}{qp}=1">1</a>')
-        if rl > 2:
-            w.append(' ... ')
-    for i in range(1 if rl < 1 else rl, (pt if ru > pt else ru) + 1):
-        w.append('<a href="javascript:void(0)" class="active">%d</a>' % p if i == p else f'<a href="?{cqs}{qp}={i}">{i}</a>')
-    if ru < pt - 1:
-        w.append(' ... ')
-    if ru < pt:
-        w.append(f'<a href="?{cqs}{qp}={pt}">{pt}</a>')
-    if pt and p != pt:
-        w.append(f'<a href="?{cqs}{qp}={p + 1}">{DJANGOAT_PAGER["next_text"]}</a>')
+    widget = []
+    if page > 1:
+        widget.append(f'<a href="?{cqs}{param}={page - 1}">{PAGER["prev_text"]}</a>')
+    page_low = page - plus_or_minus
+    page_high = page + plus_or_minus
+    if throttle_at and page_high > throttle_at:  # when throttled, adjust the upper limit for linked pages
+        page_high = throttle_at
+    if page_low > 1:  # ensure we have a link to page one
+        widget.append(f'<a href="?{cqs}{param}=1">1</a>')
+        if page_low > 2:
+            widget.append(' ... ')
+    for i in range(1 if page_low < 1 else page_low, page):
+        widget.append(f'<a href="?{cqs}{param}={i}">{i}</a>')  # pages preceding the current page
+    widget.append(f'<a href="javascript:void(0)" class="active">{page}</a>')  # the current page
+    for i in range(page + 1, (total_pages if page_high > total_pages else page_high) + 1):
+        widget.append(f'<a href="?{cqs}{param}={i}">{i}</a>')  # pages after the current page
+    if not throttle_at:  # only show the final page link when not throttling is disabled
+        if page_high < total_pages - 1:
+            widget.append(' ... ')
+        if page_high < total_pages:
+            widget.append(f'<a href="?{cqs}{param}={total_pages}">{total_pages}</a>')
+    if total_pages and page != total_pages:
+        widget.append(f'<a href="?{cqs}{param}={page + 1}">{PAGER["next_text"]}</a>')
     context.update({
-        'pager_start': ps + 1,
-        'pager_end': pe,
-        'pager_queryset': queryset[ps:pe],
-        'pager_total': t,
-        'pager': mark_safe('<div class="djangoat-pager">%s%s</div>' % (
-            f'<div class="pages">{"".join(w)}</div>',
-            f'<div class="showing">Showing {ps} - {pe} of {t}</div>'
-        )),
+        'pager': mark_safe(
+            '<div class="dg-pager">'
+              f'<div class="pages">{"".join(widget)}</div>'
+              f'<div class="showing">Showing {items_start} - {items_end} of {total_items}</div>'
+            '</div>'
+        ),
+        'pager_start': items_start + 1,
+        'pager_end': items_end,
+        'pager_queryset': queryset[items_start:items_end],
+        'pager_total': total_items,
     })
     return ''
 

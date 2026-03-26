@@ -7,12 +7,13 @@ DATA = {
     'now': lambda: timezone.now()
 }
 
-DJANGOAT_PAGER = {
+PAGER = {
     'items_per_page': 20,
     'next_text': 'Next »',
     'param': 'page',
     'plus_or_minus': 3,
     'prev_text': '« Prev',
+    'throttle_at': None
 }
 
 DJANGOAT_THUMB_GET_URL = None
