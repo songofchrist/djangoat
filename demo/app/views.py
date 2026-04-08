@@ -2,9 +2,10 @@ from django.shortcuts import render
 from django.utils import timezone
 from django.utils.safestring import mark_safe
 
+from djangoat import DATA
 from djangoat.utils import get_seconds_from_duration_string
 
-from djangoat import DATA
+from .models import Post
 
 
 
@@ -48,6 +49,7 @@ def template_tags(request):
             'three': 3,
         },
         'now': timezone.now(),
+        'posts': Post.objects.all(),
     })
 
 

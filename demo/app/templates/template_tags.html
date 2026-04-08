@@ -17,13 +17,12 @@
     <div>{% verbatim %}{{ KEY|data:ARG }}{% endverbatim %}</div>
     <p>Here we have the filter version of the `_data tag`_. This filter uses KEY to pull from Djangoat's DATA dict,
       accepting at most one argument, and outputs the result. Consider the examples below in light of following
-      functions:
-      <ul>
-        <li><b>DATA['now']</b>: returns the current time</li>
-        <li><b>DATA['cube_func']</b>: cubes ARG</li>
-        <li><b>DATA['range_func']</b>: creates a range with a length of ARG</li>
-      </ul>
-    </p>
+      functions:</p>
+    <ul>
+      <li><b>DATA['now']</b>: returns the current time</li>
+      <li><b>DATA['cube_func']</b>: cubes ARG</li>
+      <li><b>DATA['range_func']</b>: creates a range with a length of ARG</li>
+    </ul>
     <table class="examples">
       <tr>
         <td><pre><code class="language-django">{% verbatim %}{{ 'now'|data }}{% endverbatim %}</code></pre></td>
@@ -66,12 +65,11 @@
     <div>{% verbatim %}{% data KEY ARG1 ARG2 ARG3 . . . %}{% endverbatim %}</div>
     <p>Here we have the tag version of `_data filter`_. This tag uses KEY to pull from Djangoat's DATA dict and is
       required when accessing a function that requires more than a single argument. Consider the examples below in
-      light of following functions:
-      <ul>
-        <li><b>DATA['now']</b>: returns the current time</li>
-        <li><b>DATA['power_func']</b>: takes ARG1 to the power of ARG2</li>
-      </ul>
-    </p>
+      light of following functions:</p>
+    <ul>
+      <li><b>DATA['now']</b>: returns the current time</li>
+      <li><b>DATA['power_func']</b>: takes ARG1 to the power of ARG2</li>
+    </ul>
     <table class="examples">
       <tr>
         <td><pre><code class="language-django">{% verbatim %}{% data 'now' %}{% endverbatim %}</code></pre></td>
@@ -135,4 +133,50 @@
       </tr>
     </table>
   </div>
+
+  <div class="func">
+    <h2><a id="data">pager</a></h2>
+    <div>{% verbatim %}{% pager QUERYSET ITEMS_PER_PAGE PLUS_OR_MINUS %}{% endverbatim %}</div>
+    <p>Using the settings in "djangoat.PAGER", this tag generates a page navigation widget for the provided queryset.
+      "Items per page" and "plus or minus" may be adjusted on a per-page basis by supplying these as arguments. The
+      following assumes a queryset of Posts in the "posts" variable. By following the pager links, a "page" parameter
+      (by default) will be added to the url, and items display will adjust accordingly Note that the pager widget will
+      need to be styled as is appropriate to your site.</p>
+    <table class="examples">
+      <tr>
+        <td><pre><code class="language-django">{% verbatim %}{% pager posts 2 %}  # do paging and inject the "pager_queryset"
+&lt;h1&gt;Posts&lt;/h1&gt;
+&lt;hr&gt;
+(present posts by looping through the newly injected "pager_queryset" variable)
+&lt;hr&gt;
+{{ pager }}  # the pager widget{% endverbatim %}</code></pre></td>
+        <td class="hljs hljs-string">
+          <style>
+            .dg-pager { text-align: center }
+            .dg-pager a { display: inline-block; padding: 2px 5px }
+            .dg-pager .active { background: white; border-radius: 5px; color: black; font-weight: bold; text-decoration: none }
+            .dg-pager .pages {margin: 7px 0 }
+          </style>
+          {% pager posts 2 %}
+          <h1>Posts</h1><hr>
+          {% for post in pager_queryset %}<p><a href="javascript:void(0)">{{ post.title }}</a></p>{% endfor %}
+          <hr>{{ pager }}<br>
+        </td>
+      </tr>
+{#      <tr>#}
+{#        <td><pre><code class="language-django">{% verbatim %}{% data 'now' as now %}{{ now|date:DATE_FORMAT }}{% endverbatim %}</code></pre></td>#}
+{#        <td class="hljs hljs-string">{% data 'now' as now %}{{ now|date:DATE_FORMAT }}</td>#}
+{#      </tr>#}
+{#      <tr>#}
+{#        <td><pre><code class="language-django">{% verbatim %}{% data 'now>' %}{{ now|date:DATE_FORMAT }}{% endverbatim %}</code></pre></td>#}
+{#        <td class="hljs hljs-string">{% data 'now>' %}{{ now|date:DATE_FORMAT }}</td>#}
+{#      </tr>#}
+{#      <tr>#}
+{#        <td><pre><code class="language-django">{% verbatim %}{% data 'power_func' 3 4 %}{% endverbatim %}</code></pre></td>#}
+{#        <td class="hljs hljs-string">{% data 'power_func' 3 4 %}</td>#}
+{#      </tr>#}
+    </table>
+  </div>
+
+
 {% endblock %}

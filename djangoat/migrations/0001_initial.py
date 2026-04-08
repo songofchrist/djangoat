@@ -25,5 +25,6 @@ class Migration(migrations.Migration):
                 ('duration', models.CharField(blank=True, max_length=100, null=True)),
                 ('user', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL)),
             ],
+            options={'ordering': ('name',), 'verbose_name': 'Cache Fragment'},
         ),
     ]

@@ -539,7 +539,7 @@ def pager(context,
         ),
         'pager_start': items_start + 1,
         'pager_end': items_end,
-        'pager_queryset': queryset[items_start:items_end],
+        'pager_queryset': queryset[items_start - 1:items_end],
         'pager_total': total_items,
     })
     return ''
