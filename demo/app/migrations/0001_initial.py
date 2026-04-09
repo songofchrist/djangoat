@@ -22,6 +22,7 @@ class Migration(migrations.Migration):
                 ('url', models.URLField(blank=True, null=True)),
                 ('about', models.TextField(blank=True, null=True)),
             ],
+            options={'ordering': ('title',), 'verbose_name_plural': 'Companies'},
         ),
         migrations.CreateModel(
             name='Tag',
@@ -29,6 +30,7 @@ class Migration(migrations.Migration):
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('title', models.CharField(max_length=100)),
             ],
+            options={'ordering': ('title',)},
         ),
         migrations.CreateModel(
             name='Post',
@@ -39,6 +41,7 @@ class Migration(migrations.Migration):
                 ('publish_date', models.DateTimeField(blank=True, null=True)),
                 ('author', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='posts', to=settings.AUTH_USER_MODEL)),
             ],
+            options={'ordering': ('title',)},
         ),
         migrations.CreateModel(
             name='PostSponsor',

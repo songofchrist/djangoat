@@ -392,20 +392,25 @@ def get_csv_rows_from_queryset(queryset, fields, derived_fields=None, dynamic_co
 
 
 
-def get_data(key, *args):
+def get_data(key, *args, **kwargs):
     """
     A safe way to retrieve data from the ``djangoat.DATA`` dict.
 
+    Based on the kind of data corresponding to ``key``, this function will return one of the following:
+    1. If the data is a callable, return the output of the callable, given ``args`` and ``kwargs``
+    2. If the data is a Queryset, return all results (this ensures fresh results)
+    3. For all other cases, return the unaltered value
+
     :param key: the key of the data to retrieve from ``djangoat.DATA``
     :param args: args to pass into a callable when the retrieved data is a callable
-    :return: the data corresponding to ``key``, the result of the callable, when the data is callable, or the
-        queryset, when the data is a queryset
+    :param kwargs: kwargs to pass into a callable when the retrieved data is a callable
+    :return: value dependent output (see above)
     """
     try:
         d = DATA[key]
     except:
         raise KeyError(f'The key "{key}" does not exist in djangoat.DATA')
-    return d(*args) if callable(d) else (d.all() if isinstance(d, QuerySet) else d)
+    return d(*args, **kwargs) if callable(d) else (d.all() if isinstance(d, QuerySet) else d)
 
 
 

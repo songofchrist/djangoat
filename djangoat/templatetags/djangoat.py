@@ -8,8 +8,7 @@ from django.template import Library, Node, TemplateSyntaxError, VariableDoesNotE
 from django.utils import timezone
 from django.utils.safestring import mark_safe
 
-from .. import (DATA, PAGER, DJANGOAT_THUMB_GET_URL, DJANGOAT_THUMB_TYPE_HTML,
-                DJANGOAT_THUMB_TYPE_URLS)
+from .. import PAGER
 
 from ..models import CACHE_FRAG_KEYS, CacheFrag
 from ..utils import get_data, get_seconds_from_duration_string
@@ -23,13 +22,13 @@ register = Library()
 def data(key, arg=None):
     """Retrieves the output of `get_data`_ for ``djangoat.DATA[key]``
 
-    The logic behind this filter is the same as that for the ``data`` tag. The only difference is that, because this
-    is a filter, it's limited to at most one argument. But also because it's a filter, it can be included directly
+    The logic behind this filter is the same as that for the `data tag`_. The only difference is that, because this
+    is a filter, it's limited to at most one argument. But also, because it's a filter, it can be included directly
     in for loops or chained directly to other filters, which may prove more convenient in certain cases. See the
     `data tag`_ for more on the theory behind this filter.
 
     :param key: a key in ``djangoat.DATA``
-    :param arg: an argument to punauthenticatedass to the function referenced by ``djangoat.DATA[key]`` (otherwise, it's ignored)
+    :param arg: an argument to pass to the function referenced by ``djangoat.DATA[key]`` (otherwise, it's ignored)
     :return: the output of `get_data`_ for ``djangoat.DATA[key]``
     """
     return get_data(key, *([arg] if arg else []))
@@ -229,44 +228,8 @@ def thumb_url(file, key):
 
 
 # SIMPLE TAGS
-@register.simple_tag
-def call_function(func, *args):
-    """Calls a function that takes arguments.
-
-    Assuming ``func`` has been included in template context, we can pass it arguments as follows:
-
-    ..  code-block:: django
-
-        {% call_function my_func arg1 arg2 arg3 %}
-
-    Alternatively, if we want a function to be available globally, we may instead consider storing a function in
-    ``djangoat.DATA`` and calling it via the `data tag`_.
-
-    :param func: the function we want to call
-    :type func: callable
-    :param args: arguments to pass to ``func``
-    :return: the return value of the function
-    """
-    return func(*args)
-
-
-
-@register.simple_tag
-def call_method(obj, method, *args):
-    """Executes an object method that takes arguments.
-
-    :param obj: the object whose ``method`` we want to call
-    :param method: the method to call
-    :type method: str
-    :param args: arguments to pass to ``method``
-    :return: the return value of the method
-    """
-    return getattr(obj, method)(*args)
-
-
-
 @register.simple_tag(takes_context=True)
-def data(context, key, *args):
+def data(context, key, *args, **kwargs):
     """Retrieves the output of `get_data`_ for ``djangoat.DATA[key]`` and either displays it or injects it into context.
 
     To understand the usefulness of this template tag, we first need to understand the problem it solves. Suppose we
@@ -287,7 +250,7 @@ def data(context, key, *args):
     1. Including the queryset in every view means repetitive imports, potential for inconsistency from one view to
        the next in more complex queries, and wasted processing when the queryset doesn't actually get used.
     2. Including it in context processors circumvents the issues of the first approach but requires rebuilding the
-       queryset on every page load, whether it is used or not, and this adds up when we have hundreds of such queries.
+       queryset on every page load, whether it's used or not, and this adds up when we have hundreds of such queries.
     3. Query-specific template tags address both of these issues, but this approach multiplies template tags
        unnecessarily and requires us to remember where each tag is located and how to load it, making it less than
        ideal.
@@ -385,7 +348,7 @@ def data(context, key, *args):
             {% endfor %}
         {% endcache %}
 
-    We see here a call to the data tag, whose output we expect to injected into context under the variable name
+    We see here a call to the data tag, whose output we expect to be injected into context under the variable name
     "novels_by_authors". The corresponding function in DATA requires an ``authors`` argument, which we retrieve via
     a call to ``'authors'|data``, which we'll assume is elsewhere specified and returns authors instances. We then
     process this data via a loop. The results are then cached. The next time this page is hit, it populates from
@@ -400,7 +363,7 @@ def data(context, key, *args):
     preference. Adding them at the bottom of an app's ``models.py`` file saves importing models but may result in
     circular imports in certain instances where different apps' DATA entries need to reference each other's models.
     You may instead consider making a single ``data.py`` file alongside project settings, so that any models
-    needed in entries can be imported without danger of circular imports.
+    needed to build DATA entries can be imported without danger of circular imports.
 
     In summary, this tag is intended to do the following:
     * Encourage centralization of commonly used data into a single DATA dict
@@ -413,18 +376,43 @@ def data(context, key, *args):
     :param key: a key in ``djangoat.DATA``; if ``key`` ends in ">", then we'll inject the corresponding value into
         ``context`` under the name of this key
     :type key: str
-    :param args: arguments to pass to ``djangoat.DATA[key]`` when its value is callable (otherwise, it's ignored)
+    :param args: arguments to pass to ``djangoat.DATA[key]`` when its value is callable (otherwise, args are ignored)
+    :param kwargs: keyword arguments to pass to ``djangoat.DATA[key]`` when its value is callable (otherwise, kwargs
+        are ignored)
     :return: the output of `get_data`_ for ``djangoat.DATA[key]`` or an empty string when a variable is specified
     """
     inject = False
     if key[-1] == '>':
         inject = True
         key = key[:-1]
-    v = get_data(key, *args)
+    v = get_data(key, *args, **kwargs)
     if inject:
         context[key] = v
         return ''
     return v
+
+
+
+@register.simple_tag
+def method(obj, meth, *args, **kwargs):
+    """Executes an object method that takes arguments.
+
+    Given an instance ``obj``, we'll call its method ``meth``, pass it any args or kwargs provided in the tag, and
+    display the output. For example, if we have a ``post`` object we might pass three arbitrary arguments to its
+    "example_method" as follows:
+
+    ..  code-block:: django
+
+        {% method post 'example_method' arg1 arg2 arg3 %}
+
+    :param obj: the object whose method we want to call
+    :param meth: the name of method to call
+    :type meth: str
+    :param args: arguments to pass to ``meth``
+    :param kwargs: keyword arguments to pass to ``meth``
+    :return: the return value of the method
+    """
+    return getattr(obj, meth)(*args, **kwargs)
 
 
 
@@ -487,20 +475,23 @@ def pager(context,
     :param items_per_page: items to show per page (defaults to 20)
     :param plus_or_minus: how many links to display on either side of the current page (defaults to 3)
     """
+    # Calculate item start / end based on page
     param = PAGER['param']
     throttle_at = PAGER['throttle_at']
     g = context['request'].GET
     cqs = '&'.join([f'{k}={g[k]}' for k in g.keys() if k != param])  # the current query string, excluding the page param
     if cqs:
         cqs += '&'
+    total_items = queryset.count()
+    total_pages = math.ceil(total_items / items_per_page)
     try:
         page = int(g.get(param, 1))
         if page < 1:
             page = 1
+        elif page > total_pages:
+            page = total_pages
     except:
         page = 1
-    total_items = queryset.count()
-    total_pages = math.ceil(total_items / items_per_page)
     items_start = (page - 1) * items_per_page + 1
     items_end = page * items_per_page
     if items_end > total_items:
@@ -559,6 +550,7 @@ class CacheFragNode(Node):
     * Keep CacheFrag ``date_set`` and ``duration`` fields up to date
     * Make cache entries filterable and searchable in the admin based on name, user, site, and args
     * Make cache entries clearable via their corresponding CacheFrag record
+    * Allow clearing of all records in a CacheFrag queryset via the ``clear`` method
     * Enable clearing of all cache fragments encountered within the current request
     """
     def __init__(self, nodelist, expire_time_var, fragment_name, vary_on, cache_name, tag, user, site):
