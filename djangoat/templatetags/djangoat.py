@@ -179,51 +179,8 @@ def thumb(file, key):
 
 
 @register.filter
-def thumb_url(file, key):
-    """Return a thumbnail url for ``file`` based on ``key``.
-
-    This filter takes a FileField or ImageFileField and returns the url for the thumbnail of ``file``. The big idea
-    for this filter is to always return some kind of image, regardless of the kind of file passed in. We'll first
-    attempt to derive a thumbnail url using the custom ``DJANGOAT_THUMB_GET_URL`` function, which will receive ``file``
-    and ``key`` along with a third argument indicating whether  ``file`` is an ImageField. If this returns a url, we're
-    done. If not, we'll look in ``DJANGOAT_THUMB_TYPE_URLS`` for a static image whose extension matches that of
-    ``file``. If none is exists, we'll get the "DEFAULT" url. If ``file`` is itself empty, we'll return the
-    "MISSING" url. Regardless, we should end up with a url to some kind of image.
-
-    To change the static image per type, simply update the ``DJANGOAT_THUMB_TYPE_URLS`` dict, keying the path to a
-    static image with the associated lowercase file extension, not including the static url. To update the "DEFAULT"
-    or "MISSING" images, update the values of associated with these keys.
-
-    Note that ``DJANGOAT_THUMB_GET_URL`` must be defined before it can be expected to return results. You may define
-    it as follows:
-
-    ..  code-block:: python
-
-        import djangoat
-
-        def my_thumb_func(file, key, is_image):
-            . . .
-            return my_thumb_url
-
-        djangoat.DJANGOAT_THUMB_GET_URL = my_thumb_func
-
-    Also note that you needn't define this function at all unless you want individualized thumbnails for each ``file``.
-    If you only want generalized icons for different types of files, you may forgo this definition.
-
-    :param file: any file field
-    :param key: a key to pass to ``DJANGOAT_THUMB_GET_URL`` to indicate the kind of thumbnail to return
-    :return: the url of the thumbnail
-    """
-    if file:
-        if DJANGOAT_THUMB_GET_URL:
-            url = DJANGOAT_THUMB_GET_URL(file, key, file.__class__ == ImageFieldFile)
-            if url:
-                return url
-        url = DJANGOAT_THUMB_TYPE_URLS.get(file.name.split('.')[-1].lower(), DJANGOAT_THUMB_TYPE_URLS['DEFAULT'])
-    else:
-        url = DJANGOAT_THUMB_TYPE_URLS['MISSING']
-    return settings.STATIC_URL + url
-
+def thumb_url(field_file, key):
+    return field_file.get_thumb_url(key)
 
 
 

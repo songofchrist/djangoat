@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.core.cache import cache
 from django.db import models
+from django.db.models import Q
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
 
@@ -53,6 +54,19 @@ class CacheFrag(models.Model):
 
     def __str__(self):
         return self.name
+
+    @classmethod
+    def populate_cache_frags(cls):
+        """
+        Populates the CACHE_FRAG_KEYS dict based on existing CacheFrag records. We'll use this to determine if a
+        particular CacheFrag already exists for a particular name / args / user / site combination, saving us a trip
+        to the database.
+        """
+        cfs = CacheFrag.objects.all()
+        if getattr(settings, 'SITE_ID', None):  # no reason to import frags for other sites
+            cfs = cfs.filter(Q(site_id=None) | Q(site_id=settings.SITE_ID))
+        for cf in cfs:
+            CACHE_FRAG_KEYS[(cf.name, cf.args, cf.user_id, cf.site_id)] = (cf.key, cf.duration)
 
 
 

@@ -38,7 +38,7 @@ def template_tags(request):
         'power_func': lambda x, y: x ** y,
         'range_func': lambda x: range(x)
     })
-
+    posts = Post.objects.all()
     return render(request, 'template_tags.html', {
         'DATE_FORMAT': 'F jS, Y',
         'TIME_FORMAT': 'F jS, Y g:i a',
@@ -51,7 +51,8 @@ def template_tags(request):
         'power_func': lambda x, y: x ** y,
         'testing': lambda: 123,
         # 'testing': lambda x, y: x ** y,
-        'posts': Post.objects.all(),
+        'posts': posts,
+        'posts_with_images': posts.exclude(image=None),
     })
 
 
