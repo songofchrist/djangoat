@@ -71,14 +71,18 @@
     <h2><a id="thumb_url">thumb_url</a></h2>
     <div>{% verbatim %}{{ FIELD_FILE|thumb_url:KEY }}{% endverbatim %}</div>
     <p>This assumes that we've added the following in "urls.py" (or elsewhere) to set a thumbnail generator function,
-      which should return the url of the given file based on KEY. Because the demo have a third-party thumb generator
-      installed, we just return the original image's url for display purposes.</p>
-    <pre><code class="language-django">{% verbatim %}from djangoat import THUMB
+      which should return the url of the given file based on KEY. Because the demo doesn't have a third-party thumb
+      generator installed, we just return the original image's url for display purposes.</p>
+    <pre><code class="language-python">{% verbatim %}from djangoat import THUMB
 THUMB['get_thumb_url'] = lambda field_file, key: field_file.url{% endverbatim %}</code></pre><br>
     <table class="examples">{% with variable_key='two' %}
       <tr>
         <td><pre><code class="language-django">{% verbatim %}{{ posts_with_images.0.image|thumb_url:'dummy' }}{% endverbatim %}</code></pre></td>
         <td class="hljs hljs-string">{{ posts_with_images.0.image|thumb_url:'dummy' }}</td>
+      </tr>
+      <tr>
+        <td><pre><code class="language-django">{% verbatim %}&lt;img src="{{ posts_with_images.0.image|thumb_url:'dummy' }}"&gt;{% endverbatim %}</code></pre></td>
+        <td class="hljs hljs-string"><img src="{{ posts_with_images.0.image|thumb_url:'dummy' }}"></td>
       </tr>
     {% endwith %}</table>
   </div>
