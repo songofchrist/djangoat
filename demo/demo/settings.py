@@ -125,7 +125,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
 # ADDED FOR TESTING
-DJANGOAT_SETTINGS = 'demo.djangoat_settings'
+DJANGOAT_SETTINGS = 'demo.djangoat'
 
 SITE_ID = 1  # for "sitecache" testing
 

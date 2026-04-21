@@ -49,8 +49,6 @@ def template_tags(request):
         },
         'now': timezone.now(),
         'power_func': lambda x, y: x ** y,
-        'testing': lambda: 123,
-        # 'testing': lambda x, y: x ** y,
         'posts': posts,
         'posts_with_images': posts.exclude(image=None),
     })

@@ -114,7 +114,7 @@ def partition(items, groups=3):
 def seconds_to_units(seconds):
     """Breaks seconds down into meaningful units.
 
-    If an API gives us the duration of something in seconds, we'll likely want to display this in a form that will be
+    If we have the duration of something in seconds, we'll likely want to display this in a form that will be
     more meaningful to the user. This tag divides seconds into its component parts as shown below:
 
     ..  code-block:: python
@@ -127,7 +127,7 @@ def seconds_to_units(seconds):
         }
 
     :param seconds: total seconds to break into different units
-    :type s: int
+    :type seconds: int
     :return: a dict of meaningful time units
     """
     m = h = d = 0
@@ -145,36 +145,8 @@ def seconds_to_units(seconds):
 
 
 @register.filter
-def thumb(file, key):
-    """Return html that represents a thumbnail for ``file`` based on ``key``.
-
-    This filter works identically to the `thumb_url tag`_, but yields html instead of a url. It also allows us
-    to associated html with a particular type of file via ``DJANGOAT_THUMB_TYPE_HTML``. If no url is returned by
-    the ``DJANGOAT_THUMB_GET_URL`` function, then we'll first attempt to get html from this dict prior to trying
-    for a static url from ``DJANGOAT_THUMB_TYPE_URLS``. This first dict allows us to associate vector icons, such as
-    those in Font Awesome, with a particular extension rather an image. Or we may simply use styled text as the
-    thumbnail for certain kinds of files.
-
-    Note that the ``DJANGOAT_THUMB_TYPE_HTML`` will take priority. If we find a match for a particular file type in
-    this dict, we will use it and ignore entries in ``DJANGOAT_THUMB_TYPE_URLS``.
-
-    :param file: any file field
-    :param key: a key to pass to ``DJANGOAT_THUMB_GET_URL`` to indicate the kind of thumbnail to return
-    :return: thumbnail html
-    """
-    if file:
-        if DJANGOAT_THUMB_GET_URL:
-            url = DJANGOAT_THUMB_GET_URL(file, key, file.__class__ == ImageFieldFile)
-            if url:
-                return mark_safe(f'<img class="thumb" src="{url}">')
-        ext = file.name.split('.')[-1].lower()
-        html = DJANGOAT_THUMB_TYPE_HTML.get(ext, None)
-        if html:
-            return mark_safe(html)
-        url = DJANGOAT_THUMB_TYPE_URLS.get(ext, DJANGOAT_THUMB_TYPE_URLS['DEFAULT'])
-    else:
-        url = DJANGOAT_THUMB_TYPE_URLS['MISSING']
-    return mark_safe(f'<img class="thumb" src="{settings.STATIC_URL}{url}">')
+def thumb_html(field_file, key):
+    return field_file.get_thumb_html(key)
 
 
 
