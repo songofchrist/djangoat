@@ -1,0 +1,26 @@
+{% load djangoat %}
+{% comment %}
+This template takes a list of "column_trs" (table rows to be inserted within the TBODY
+tag of the containing column) and formats each to be displayed in its own separate column.
+It assumes that certain columns will have different widths from others. To specify column
+widths, set "column_widths" to a comma-delimited list of widths. From the number of widths
+provided in this string, we'll determine "columns_per_row" and will format columns so that
+each row on desktop clients contains that many columns, each sized to its respective
+width.
+{% endcomment %}
+<div class="columns">
+  {% set column_widths=column_widths|split columns_per_row=column_widths|length %}
+  <!--[if true]><table><tbody><tr><td style="width:{{ column_widths.0 }}px"><![endif]-->
+  {% for tr in column_trs %}
+    {% set current=forloop.counter0|mod:columns_per_row next=forloop.counter|mod:columns_per_row %}
+    <div style="width:{{ column_widths|index:current }}px"><table><tbody class="col">{{ tr }}</tbody></table></div>
+    {% if not forloop.last %}
+      {% if forloop.counter|divisibleby:columns_per_row %}  {# conclude the previous row and start another #}
+        <!--[if true]></td></tr><tr><td style="width:{{ column_widths|index:next }}px"><![endif]-->
+      {% else %}  {# conclude the previous cell and start another #}
+        <!--[if true]></td><td style="width:{{ column_widths|index:next }}px"><![endif]-->
+      {% endif %}
+    {% endif %}
+  {% endfor %}
+  <!--[if true]></td></tr></tbody></table><![endif]-->
+</div>

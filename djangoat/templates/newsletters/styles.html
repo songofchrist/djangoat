@@ -1,0 +1,60 @@
+{% load djangoat %}
+{% with half_row_spacing=row_spacing|div:2 half_col_spacing=col_spacing|div:2 %}
+<style>  {# basic styles that apply to all newsletters #}
+  .columns {  {# inline divs containing tables should be centered by default #}
+    text-align: center;
+  }
+  .columns > div {  {# containers for the tables used for column content #}
+    display: inline-block;
+    vertical-align: top;
+  }
+  .columns > div > table {
+    {% comment %}
+    Use one table to house each column's content. Content will be placed within a TBODY tag of class "col".
+    This column may contain as many rows / cells as needed. Within this column, content will be fixed (i.e.
+    non-responsive). The table will be responsive on account of the containing DIV.
+    {% endcomment %}
+    width: 100%;
+  }
+  .columns > div > .col > tr > td {
+    {% comment %}
+    When a column is bumped down to the next level, we'll want the vertical spacing between them to be
+    ``row_spacing``. If we have half of this number on the bottom of one and the other half on the top of
+    the other, we get back the whole amount in between vertically. The same idea applies to ``column_spacing``.
+    To compensate for the spacing above the first row and below the last, add one of the following classes
+    to the TD containing the columns: half-row-pad, half-row-pad-top, half-row-pad-bottom. The same classes
+    are available in "col" variations to compensate for left / right spacing. Or to pad the entire cell with
+    half padding, use the class "half-pad"
+    {% endcomment %}
+    padding: {{ half_row_spacing }}px {{ half_col_spacing }}px;
+    text-align: left;
+  }
+  .half-col-pad {
+    padding-left: {{ half_col_spacing }}px;
+    padding-right: {{ half_col_spacing }}px;
+  }
+  .half-col-pad-left {
+    padding-left: {{ half_col_spacing }}px;
+  }
+  .half-col-pad-right {
+    padding-right: {{ half_col_spacing }}px;
+  }
+  .half-pad {
+    padding: {{ half_row_spacing }}px {{ half_col_spacing }}px;
+  }
+  .half-row-pad {
+    padding-bottom: {{ half_row_spacing }}px;
+    padding-top: {{ half_row_spacing }}px;
+  }
+  .half-row-pad-bottom {
+    padding-bottom: {{ half_row_spacing }}px;
+  }
+  .half-row-pad-top {
+    padding-top: {{ half_row_spacing }}px;
+  }
+  .section {  {# assigned to the TD that houses each newsletter section #}
+    padding: {{ section_vertical_padding }}px {{ section_horizontal_padding }}px
+  }
+
+</style>
+{% endwith %}

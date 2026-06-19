@@ -1,0 +1,24 @@
+{% load djangoat %}
+{% comment %}
+This template takes a list of "column_trs" (table rows to be inserted within the TBODY
+tag of the containing column) and formats each to be displayed in its own separate column.
+"column_width" determines the width of each column, and "columns_per_row" the maximum
+number of columns per row on desktop clients. Alternatively, provide "row_width" (the
+maximum width that all columns in a row should occupy), and "column_width" will be
+calculated automatically.
+{% endcomment %}
+{% firstof column_width row_width|div:columns_per_row as column_width %}
+<div class="columns">
+  <!--[if true]><table><tbody><tr><td style="width:{{ column_width }}px"><![endif]-->
+  {% for tr in column_trs %}
+    <div style="width:{{ column_width }}px"><table><tbody class="col">{{ tr }}</tbody></table></div>
+    {% if not forloop.last %}
+      {% if forloop.counter|divisibleby:columns_per_row %}  {# conclude the previous row and start another #}
+        <!--[if true]></td></tr><tr><td style="width:{{ column_width }}px"><![endif]-->
+      {% else %}  {# conclude the previous cell and start another #}
+        <!--[if true]></td><td style="width:{{ column_width }}px"><![endif]-->
+      {% endif %}
+    {% endif %}
+  {% endfor %}
+  <!--[if true]></td></tr></tbody></table><![endif]-->
+</div>

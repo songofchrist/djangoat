@@ -3,8 +3,8 @@ import math
 from django.conf import settings
 from django.core.cache import InvalidCacheBackendError, caches
 from django.core.cache.utils import make_template_fragment_key
-from django.db.models.fields.files import ImageFieldFile
-from django.template import Library, Node, TemplateSyntaxError, VariableDoesNotExist
+from django import template
+from django.template.base import Node, TemplateSyntaxError, VariableDoesNotExist
 from django.utils import timezone
 from django.utils.safestring import mark_safe
 
@@ -13,7 +13,7 @@ from .. import PAGER
 from ..models import CACHE_FRAG_KEYS, CacheFrag
 from ..utils import get_data, get_seconds_from_duration_string
 
-register = Library()
+register = template.Library()
 
 
 
@@ -36,6 +36,21 @@ def data(key, arg=None):
 
 
 @register.filter
+def div(a, b):
+    """Returns the integer result of ``a % b``.
+
+    Note that this method is meant to aid in presentation, not for complex mathematical operations.
+    Thus, we'll cast both numbers to integers prior to evaluating and will return the result rounded
+    down to the nearest integer.
+
+    :param a: the dividend
+    :param b: the divisor
+    :return: the integer result of ``a / b``
+    """
+    return int(int(a) / int(b))
+
+
+@register.filter
 def get(dictionary, key):
     """Retrieves the value of a dictionary entry with the given key.
 
@@ -52,19 +67,50 @@ def get(dictionary, key):
 
 
 @register.filter
-def mod(a, b):
-    """Returns the result of ``a % b``.
+def index(lst, index):
+    """Retrieve the list value at the given index.
 
-    :param a: the number to be divided
-    :type a: int, float
-    :param b: the number to divide by
-    :type b: int, float
-    :return: the remainder of the division
+    :param lst: a list (or other iterable)
+    :param index: the index of the item to retrieve
+    :return: the corresponding value (or an empty string if no such index exists)
     """
     try:
-        return a % b
+        return lst[index]
     except:
         return ''
+
+
+
+@register.filter
+def mod(a, b):
+    """Returns the integer result of ``a % b``.
+
+    Note that this method is meant to aid in presentation, not for complex mathematical operations.
+    Thus, we'll cast both numbers to integers prior to evaluating. Also, if you're using this within
+    a loop to do something every ``b`` iterations, consider using the builtin ``divisibleby`` filter
+    instead (i.e. ``{% if a|divisibleby:b %} . . . {% endif %}``). Use this filter only when the
+    value of the remainder matters.
+
+    :param a: the dividend
+    :param b: the divisor
+    :return: the remainder of ``a / b``
+    """
+    return int(a) % int(b)
+
+
+
+@register.filter
+def mul(a, b):
+    """Returns the integer result of ``a * b``.
+
+    Note that this method is meant to aid in presentation, not for complex mathematical operations.
+    Thus, we'll cast both numbers to integers prior to evaluating.
+
+    :param a: a number
+    :param b: a second number
+    :return: the result of ``a * b``
+    """
+    return int(a) * int(b)
 
 
 
@@ -145,6 +191,33 @@ def seconds_to_units(seconds):
 
 
 @register.filter
+def split(string, delimiter=','):
+    """Derive a list from a delimited string.
+
+    :param string: the string to split
+    :param delimiter: the string to split on (defaults to a comma)
+    :return: a list
+    """
+    return string.split(delimiter)
+
+
+
+@register.filter
+def sub(a, b):
+    """Returns the integer result of ``a * b``.
+
+    Note that this method is meant to aid in presentation, not for complex mathematical operations.
+    Thus, we'll cast both numbers to integers prior to evaluating.
+
+    :param a: a number
+    :param b: a second number
+    :return: the result of ``a * b``
+    """
+    return int(a) - int(b)
+
+
+
+@register.filter
 def thumb_html(field_file, key):
     return field_file.get_thumb_html(key)
 
@@ -156,7 +229,26 @@ def thumb_url(field_file, key):
 
 
 
+
 # SIMPLE TAGS
+@register.simple_block_tag(takes_context=True)
+def append(context, content, list_name):
+    """Appends block content to the specified list.
+
+    Given a list of ``list_name``, append block ``content`` to that list. If the list, doesn't yet exist, create it
+    and then append it. This is useful if we need to render a series of separate template fragments and then pass
+    them as a list to another template tag or template.
+
+    :param context: template context
+    :param content: the rendered content of the block tag
+    :param list_name: the list to which to append ``content`` (will be created if it doesn't exist)
+    :return: an empty string
+    """
+    context.setdefault(list_name, []).append(content)
+    return ''
+
+
+
 @register.simple_tag(takes_context=True)
 def data(context, key, *args, **kwargs):
     """Retrieves the output of `get_data`_ for ``djangoat.DATA[key]`` and either displays it or injects it into context.
@@ -562,7 +654,6 @@ class CacheFragNode(Node):
         return value
 
 
-
 def _get_cache_frag_node(parser, token, tag, user=False, site=False):
     """
     This function is modeled after django.templatetags.do_cache function but includes, endtag, site and user
@@ -589,7 +680,6 @@ def _get_cache_frag_node(parser, token, tag, user=False, site=False):
         user,
         site
     )
-
 
 
 @register.tag
@@ -666,6 +756,107 @@ def cache(parser, token):
     admin and want all fragments on that page refreshed, so that we can see the most up-to-date version of it.
     """
     return _get_cache_frag_node(parser, token, 'cache')
+
+
+class MapNode(Node):
+    def __init__(self, item_var, items_iterable, new_list_name, nodelist):
+        self.item_var = item_var
+        self.items_iterable = items_iterable
+        self.new_list_name = new_list_name
+        self.nodelist = nodelist
+
+    def render(self, context):
+        new_list = []
+        for item in self.items_iterable.resolve(context, ignore_failures=True):
+            context[self.item_var] = item
+            new_list.append(self.nodelist.render(context))
+        context[self.new_list_name] = new_list
+        return ''
+
+@register.tag('map')
+def do_map(parser, token):
+    """Formats list items using the template fragment in the tag block and outputs the resulting list.
+
+    This tag is meant to emulate the python ``map`` function, accepting a list of X items, rendering them
+    one at a time using the template fragment within the map block, and saving the result into a template
+    variable, which can then be passed on to another template tag or template.
+
+    For example, suppose we have a list of users and want to wrap each item in the list in HTML. We might
+    do this in python as follows before passing it into template context::
+
+        wrapped_users = map(lambda user: f"<div><b>{user.name}</b> from {user.city} ({user.age})</div>", users)
+
+    Or we could do it directly inside a Django template as follows::
+
+        {% map user in users as wrapped_users %}
+            <div><b>{{ user.name }}</b> from {{ user.city }} ({{ user.age }})</div>
+        {% endmap %}
+
+    Either way, ``wrapped_users`` will now contain one HTML formatted item for each user in ``users``.
+
+    The syntax here is similar to that of a for loop, but unlike the for loop, which renders output in place,
+    an "as" clause is required here to indicate the name of the context variable in which the resulting list
+    should be stored. This variable will then be injected into context for later use.
+    """
+    error = False
+    try:
+        _, item_var, in_kw, items_iterable, as_kw, new_list_name = token.split_contents()
+        if in_kw != 'in' or as_kw != 'as':
+            error = True
+    except:
+        error = True
+    if error:
+        raise TemplateSyntaxError("'map' tags take the form {%% map ITEM_VAR in ITEMS_ITERABLE"
+                                  " as NEW_LIST_NAME %%}; you entered {%% %s %%}" % token.contents)
+    nodelist = parser.parse(('endmap',))
+    parser.delete_first_token()
+    items_iterable = parser.compile_filter(items_iterable)
+    return MapNode(item_var, items_iterable, new_list_name, nodelist)
+
+
+
+class SetNode(template.Node):
+    def __init__(self, context):
+        self.kwargs = context
+
+    def render(self, context):
+        for k, v in self.kwargs.items():
+            context[k] = v.resolve(context)
+        return ''
+
+@register.tag('set')
+def do_set(parser, token):
+    """
+    As with the ``with`` tag, this tag expects one or more variable-value pairs. But rather
+    than limiting these variables to being used within a tag block, this tag simply overwrites
+    the like-named context variable with the given value. For example, ``{% set one=1 two=2 %}``
+    will set the "one" variable to a value of 1 and 'two' to a value of 2. This gives us more
+    freedom with our logic. For example, suppose we have the following:
+
+    .. code-block::
+        {% if worked %}
+            {% include 'my/output/template.html' with msg='success' mood='happy' %}
+        {% else %}
+            {% include 'my/output/template.html' %}
+        {% endif %}
+
+    We can condense this to the following:
+
+    .. code-block::
+        {% if worked %}{% set msg='success' mood='happy' %}{% endif %}
+        {% include 'my/output/template.html' %}
+
+    Also unlike the ``with`` tag, later variables can make use of previous ones within the same
+    assignment. For example:
+
+    .. code-block::
+        {% set a=2 b=3 c=a|mul:b %}
+
+    "b" here will equal 6.
+
+    :return: an empty string
+    """
+    return SetNode(template.base.token_kwargs(token.split_contents()[1:], parser))
 
 
 
