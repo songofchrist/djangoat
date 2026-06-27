@@ -7,6 +7,153 @@ from djangoat.utils import get_json_file_contents
 
 
 
+class Newsletter(object):
+    """Aids in constructing basic section-based newsletters that will look as expected in a variety of clients.
+
+    The steps to newsletter creation are as follows:
+    1. Define types of sections, providing a default section context object to be used will all sections of that type
+    2. Add sections, providing a context object unique to each
+    3. Build the newsletter section by section:
+        a. Process the section context, substituting in and limiting any querysets passed in
+        b. Render the section according to its designated template and store it in the section list
+    4. Join sections together to form the newsletter body
+    5. Render the body and styles into the final newsletter html
+
+    Read the comments on the method below for more.
+    """
+    name = ''           # a string identifier for this newsletter
+    html = ''           # the full newsletter HTML, including both HEAD (with styles) and BODY tags
+    html_body = ''      # the HTML for the BODY tag (includes inlined styles but no STYLE tags)
+    html_head = ''      # the HTML for the HEAD tag, excluding the STYLE tag
+    html_style = ''     # the CSS for the STYLE tag included in the HEAD
+    subject = ''        # the subject line of the email
+    text = ''           # a textual version of the email
+
+    def __init__(self):
+        """
+        If I'm populating multiple different sections using the same base queryset, I want to be certain that I
+        don't get duplicates of previous sections in later sections. This dict tracks used primary keys by queryset
+        type. For example:
+
+        {
+            'books': set(),
+            'events': set(),
+            'posts': set()
+        }
+
+        When we pass a queryset keyed to "books" into a section's context, any of these that are rendered in
+        that section will have their primary keys added to the "books" set, so that they can be excluded from
+        subsequent sections.
+        """
+        self.used_item_pks = {}
+        """
+        This works similarly to ``used_item_pks``, but it tracks items on a per-section basis. For example:
+        
+        {
+            SECTION_1_KEY : {
+                'books': set(),
+                'posts': set()
+            }
+            SECTION_2_KEY : {
+                'events': set(),
+                'posts': set()
+            }
+        }
+        
+        Seeing the above, we'd expect section one to reference one or more books and posts and section two to
+        reference one or more events and posts. This breakdown may be useful for recording exactly what content
+        content appeared in a given newsletter, so that it can be used to determine the content of future
+        sends.
+        """
+        self.used_item_pks_by_section = {}
+
+    def add_section(self, context):
+        """Register a new section to the newsletter builder.
+
+        If this sections is of a particular type, calculate the final section context by combining that type's
+        context with the ``context`` provided and return the result.
+
+        :param context:
+        :return: the context of the section added
+        """
+
+    def build(self, preview=False):
+        """Generate newsletter html and other related values.
+
+        When building a newsletter, we'll remove any STYLE tags intermingled with content in newsletter
+        templates and assemble the CSS therein into a single STYLE tag placed in the HEAD. The content of this
+        tag will be stored in ``html_style``, which will be added to ``html_head``, while the html content of
+        the newsletter will be stored in ``html_body``. These will all then be assembled into ``html``.
+
+        For a newsletter preview, this final ``html`` is all we should need to display a preview of the final
+        newsletter. However, because no inlining of styles is done for previews, it will be unsuitable for
+        a final send.
+
+        When ``preview`` is False, we'll do the following:
+        1. Extract qny media queries that we find in the STYLE tag and save them into ``html_style``
+        2. Inline styles and store the result in ``html_body``
+        3. Overwrite ``html`` with the new inlined BODY and STYLE
+
+        Note that we keep ``html_head``, ``html_style`` and ``html_body`` separate here, because there may
+        be some newsletter APIs that require that these things be passed over separately. For most, ``html``,
+        which contains the full web HTML, should suffice.
+
+
+
+        // Matches @media queries and their block content
+        const regex = /@media[^{]+\{([\s\S]+?\})\s*\}/g;
+
+        /@media[^{]+\{([\s\S]+?})\s*}/g
+
+
+        Email clients (like Gmail, Outlook, and Apple Mail) only support standard, flat CSS. Email code never uses
+        nested CSS rules (like Sass or modern CSS nesting), which makes Python's standard re module perfectly reliable
+        for this task.
+
+        import re
+
+        # The Regex Pattern
+        media_query_pattern = r'(@media[^{]+\{(?:[^{}]+|\{[^{}]*\})*\})'
+
+        Why this specific regex works for emailsHandles single-level brackets:
+        The (?:[^{}]+|\{[^{}]*\})* section safely matches everything inside the media query, including the standard internal CSS brackets (.class { property: value; }).
+        Ignores regular CSS: It won't accidentally grab your standard, non-responsive email styles (like .button { color: blue; }).
+        Captures the entire block: It returns the @media header, the condition, and all the responsive style rules wrapped inside it.
+
+        :param preview: when False, we'll execute the ``inline_styles`` method as we generate the final html
+            for this newsletter; when True, we'll skip inlining
+        """
+
+    def define_section_type(self, type, context):
+        """Define a type of section for future reference.
+
+        Sections defined by this method can be referenced by the key "type" within the context provided to
+        ``add_sections``. When the value of this key corresponds to a predefined section type, we'll derive the
+        context of the section being added by using the type context as a base and merging in the context of
+        the just added section, thus simplifying the creation of new sections of the given type.
+
+        :param type: a string key by which to identify this type of section
+        :param context: the default context for all sections of this type
+        """
+
+    def inline_styles(self):
+        """Inlines newsletter styles and returns the resulting HTML.
+
+        Note that prior to calling this method, we'll extract and preserve any media queries (which cannot
+        be inlined and which most inliners will strip out). After inlining is complete, we'll then inject
+        these media queries back into the HEAD, so that they are available for any clients that recognize
+        them.
+
+        NOTE: by default, this method returns newsletter HTML as-is. Make sure to implement it with your
+        preferred inliner when subclassing Newsletter.
+
+        :return: the resulting inlined HTML
+        """
+        return self.html
+
+
+
+
 class RestClient(object):
     """A bare-bones REST client on which service-specific REST clients can be built.
 

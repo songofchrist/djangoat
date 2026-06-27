@@ -1,60 +1,134 @@
 {% load djangoat %}
-{% with half_row_spacing=row_spacing|div:2 half_col_spacing=col_spacing|div:2 %}
-<style>  {# basic styles that apply to all newsletters #}
-  .columns {  {# inline divs containing tables should be centered by default #}
+{% set half_row_spacing=row_spacing|div:2 half_col_spacing=col_spacing|div:2 %}
+{% comment %}
+The newsletter will be a centered table X pixels wide and will contain one row per newsletter section.
+For example:
+
+<table id="newsletter" style="width:600px"><tbody>
+  <tr><td class="section">SECTION_CONTENT</td></tr>
+  <tr><td class="section">SECTION_CONTENT</td></tr>
+  <tr><td class="section">SECTION_CONTENT</td></tr>
+</tbody></table>
+
+An id or class may be added to each section to distinguish one from the next for styling. Note that by
+default, sections are padded with "section_tb_padding" and "section_lr_padding". If we want to make an
+exception by stretching an image full width (i.e. in a header), we might include do the following:
+
+. . .
+<tr><td class="section no-padding">
+  <table><tbody>
+    <tr><td>FULL_WIDTH_IMAGE</td></tr>
+    <tr><td class=section>PADDED_SEND_DATE</td></tr>
+  </tbody></table
+</td></tr>
+. . .
+
+The "no-padding" class will remove padding from the main section, and adding the "section" class to a TD
+in the TABLE contained therein will add section padding in that cell instead, leaving the image above it
+to span the full width of the newsletter.
+
+When a section has a heading assigned, it will appear just above the corresponding section and will have
+the same padding as a section by default, along with some basic styling to distinguish it from subsequent
+text.
+
+The styles below apply generally to all newsletters and may be used as shortcuts for enabling various
+kinds of behavior. For example, adding an "expand-on-mobile" class to a section containing columns will
+cause those columns to expand to full width on mobile devices.
+{% endcomment %}
+<style>
+  .columns {
+    {% comment %}
+    Column HTML should be structured as follows (i.e. a two column layout):
+
+    <div class="columns>
+      <!--[if true]><table><tbody><tr><td style="width:150px"><![endif]-->
+      <div style="width:150px">
+        <table><tbody class="col">CONTENT</tbody></table>
+      </div>
+      <!--[if true]></td><td style="width:150px"><![endif]-->
+      <div style="width:150px">
+        <table><tbody class="col">CONTENT</tbody></table>
+      </div>
+      <!--[if true]></td></tr></tbody></table><![endif]-->
+    </div>
+
+    CONTENT here can be any fixed TR/TD layout, including multiple rows or colspans of cells as needed. The
+    DIV tags under DIV.columns will be inline and responsive on mobile, so that subsequent columns fall under
+    prior columns on smaller screens. The HTML comment tags ensure a proper display in Outlook on desktop.
+    {% endcomment %}
     text-align: center;
   }
-  .columns > div {  {# containers for the tables used for column content #}
+  .columns > div {
     display: inline-block;
     vertical-align: top;
   }
-  .columns > div > table {
-    {% comment %}
-    Use one table to house each column's content. Content will be placed within a TBODY tag of class "col".
-    This column may contain as many rows / cells as needed. Within this column, content will be fixed (i.e.
-    non-responsive). The table will be responsive on account of the containing DIV.
-    {% endcomment %}
-    width: 100%;
-  }
-  .columns > div > .col > tr > td {
+  .columns .col > tr > td {
     {% comment %}
     When a column is bumped down to the next level, we'll want the vertical spacing between them to be
-    ``row_spacing``. If we have half of this number on the bottom of one and the other half on the top of
-    the other, we get back the whole amount in between vertically. The same idea applies to ``column_spacing``.
-    To compensate for the spacing above the first row and below the last, add one of the following classes
-    to the TD containing the columns: half-row-pad, half-row-pad-top, half-row-pad-bottom. The same classes
-    are available in "col" variations to compensate for left / right spacing. Or to pad the entire cell with
-    half padding, use the class "half-pad"
+    ``row_spacing``. When this happens, if we have half of this number on the bottom of one and the other
+    half on the top of the other, we get back the whole amount in between vertically. The same idea applies
+    to ``column_spacing``. BUT this leaves extra spacing on the first and last rows, which we'll want to
+    even out.
     {% endcomment %}
     padding: {{ half_row_spacing }}px {{ half_col_spacing }}px;
     text-align: left;
   }
-  .half-col-pad {
-    padding-left: {{ half_col_spacing }}px;
-    padding-right: {{ half_col_spacing }}px;
+  .heading {
+    font-size: 24px;
+    font-weight: bold;
+    text-align: center;
   }
-  .half-col-pad-left {
-    padding-left: {{ half_col_spacing }}px;
+  img {
+    border: 0;
+    max-width: 100%;
   }
-  .half-col-pad-right {
-    padding-right: {{ half_col_spacing }}px;
+  #newsletter {
+    color: #333;
+    font-size: 16px;
+    max-width: {{ desktop_width }}px;
+    width: 100%;
   }
-  .half-pad {
-    padding: {{ half_row_spacing }}px {{ half_col_spacing }}px;
+  .no-padding {  {# for example, if an image needs to span a section from one edge to the other #}
+    padding: 0!important;
   }
-  .half-row-pad {
-    padding-bottom: {{ half_row_spacing }}px;
-    padding-top: {{ half_row_spacing }}px;
+  .section, .heading {  {# assigned to the TD that houses each section #}
+    padding: {{ section_tb_padding }}px {{ section_lr_padding }}px
   }
-  .half-row-pad-bottom {
-    padding-bottom: {{ half_row_spacing }}px;
+  .section.column {  {# a column section only contains columns; needs a padding adjustment #}
+    padding: {{ section_tb_padding|sub:half_col_spacing }}px {{ section_lr_padding|sub:half_row_spacing }}px
   }
-  .half-row-pad-top {
-    padding-top: {{ half_row_spacing }}px;
+  table {
+    width: 100%;
   }
-  .section {  {# assigned to the TD that houses each newsletter section #}
-    padding: {{ section_vertical_padding }}px {{ section_horizontal_padding }}px
+  td {
+    padding: 0;
+    vertical-align: top;
   }
-
+  /* MEDIA QUERIES */
+  {% comment %}
+  To include media queries in the newsletter, enter an opening MEDIA QUERIES comment, insert your queries, and then
+  close with an END MEDIA QUERIES comment. These comments are functional in that they denote where the media queries
+  begin and end and will be used to extract the queries prior to inlining. After inlining, these will be added back
+  so as to appear in the final newsletter.
+  {% endcomment %}
+  @media only screen and (max-width: {{ desktop_width }}px) {
+    .center-on-mobile {
+      text-align: center!important;
+    }
+    img.expand-on-mobile {  {# remove the width limit on images #}
+      height: auto!important;
+      width: 100%!important;
+    }
+    .section.expand-on-mobile .columns > div {  {# remove the width limit on columns #}
+      display: block!important;
+      width: 100%!important;
+    }
+    .no-pbottom-on-mobile {
+      padding-bottom: 0!important;
+    }
+    .no-ptop-on-mobile {
+      padding-top: 0!important;
+    }
+  }
+  /* END MEDIA QUERIES */
 </style>
-{% endwith %}
