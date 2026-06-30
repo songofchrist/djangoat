@@ -7,7 +7,7 @@ from django.dispatch import receiver
 
 
 
-CACHE_FRAG_KEYS = {}  # store cache keys by CacheFrag (FRAG_NAME, USER_ID, SITE_ID, ARGS_STRING) tuples
+CACHE_FRAG_KEYS = {}  # store cache keys by CacheFrag (FRAG_NAME, ARGS_STRING, USER_ID, SITE_ID) tuples
 
 
 
@@ -56,10 +56,10 @@ class CacheFrag(models.Model):
         return self.name
 
     @classmethod
-    def populate_cache_frags(cls):
+    def populate_key_dict(cls):
         """
         Populates the CACHE_FRAG_KEYS dict based on existing CacheFrag records. We'll use this to determine if a
-        a CacheFrag already exists for a particular name / args / user / site combination, saving us a trip to the
+        CacheFrag already exists for a particular name / args / user / site combination, saving us a trip to the
         database.
         """
         cfs = cls.objects.all()

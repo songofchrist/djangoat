@@ -17,4 +17,4 @@ if settings.DEBUG:
 
 
 # Execute once on server start after apps have loaded
-CacheFrag.populate_cache_frags()
+CacheFrag.populate_key_dict()

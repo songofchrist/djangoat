@@ -1,3 +1,4 @@
+import datetime
 import math
 
 from django.conf import settings
@@ -11,7 +12,7 @@ from django.utils.safestring import mark_safe
 from .. import PAGER
 
 from ..models import CACHE_FRAG_KEYS, CacheFrag
-from ..utils import get_data, get_seconds_from_duration_string
+from ..utils import get_args_kwargs_from_string, get_data, get_seconds_from_duration_string
 
 register = template.Library()
 
@@ -226,6 +227,41 @@ def thumb_html(field_file, key):
 @register.filter
 def thumb_url(field_file, key):
     return field_file.get_thumb_url(key)
+
+
+
+@register.filter
+def timedelta(date, delta_string):
+    """Add or subtract a delta to a datetime.
+
+    For example, both of the following add 30 days to "date"::
+
+        {{ date|timedelta:'30' }}
+        {{ date|timedelta:'days=30' }}
+
+    And both of the following subtract 30 days from "date"::
+
+        {{ date|timedelta:'-30' }}
+        {{ date|timedelta:'-days=30' }}
+
+    We can also work in a combination of units::
+
+        {{ date|timedelta:'days=3, weeks=7' }}
+        {{ date|timedelta:'days=2, hours=12' }}
+        {{ date|timedelta:'hours=5, minutes=30' }}
+
+    A leading "-" will result in the delta being subtracted from "date". Otherwise, it will be added.
+
+    :param date: the date to which the delta should be added
+    :param delta_string: a delta string, expressing the same arguments as expected by timedelta
+    :return: the resultant date
+    """
+    pm = 1
+    if delta_string[0] == '-':
+        pm = -1
+        delta_string = delta_string[1:]
+    args, kwargs = get_args_kwargs_from_string(delta_string)
+    return date + pm * datetime.timedelta(*args, **kwargs)
 
 
 

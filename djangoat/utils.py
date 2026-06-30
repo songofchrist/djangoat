@@ -31,7 +31,7 @@ from django.utils.html import strip_tags
 # from django.urls import path, resolve
 # from django.urls.resolvers import URLPattern
 
-from djangoat.constants import REGEX_DURATION_STRING
+from djangoat.constants import ARGS_KWARGS_REGEX, DURATION_STRING_REGEX
 
 from . import DATA
 
@@ -83,6 +83,33 @@ def get(obj, *keys):
         return r
     except:
         return None
+
+
+
+def get_args_kwargs_from_string(string):
+    """Parse a string containing args and / or kwargs into something function-ready args / kwargs.
+
+    For example, for a string of "10, 'ten', days=10, days_str='ten'", this function will return the
+    following tuple: ([10, 'ten'], {'days': 10, 'days_str': 'ten'})
+
+    :param string: a string of args and / or kwargs
+    :return: a tuple of the form (ARGS, KWARGS), ready to be executed
+    """
+    args = []
+    kwargs = {}
+    for match in ARGS_KWARGS_REGEX.findall(string):
+        k, v = match[0], match[1]
+        if v[0] in ('"', "'"):
+            v = v[1:-1]
+        elif '.' in v:
+            v = float(v)
+        else:
+            v = int(v)
+        if k:
+            kwargs[k] = v
+        else:
+            args.append(v)
+    return args, kwargs
 
 
 
@@ -724,7 +751,7 @@ def get_remote_image(url, name=None, format=None, alpha=None, max_dims=None):
 def get_seconds_from_duration_string(duration):
     if duration.isnumeric():
         return int(duration)
-    ds = REGEX_DURATION_STRING.split(duration)[:-1]
+    ds = DURATION_STRING_REGEX.split(duration)[:-1]
     i = len(ds) - 1
     s = {
         'd': 86400,
