@@ -851,7 +851,7 @@ def do_map(parser, token):
 
 
 
-class SetNode(template.Node):
+class VarNode(template.Node):
     def __init__(self, context):
         self.kwargs = context
 
@@ -860,13 +860,14 @@ class SetNode(template.Node):
             context[k] = v.resolve(context)
         return ''
 
-@register.tag('set')
-def do_set(parser, token):
-    """
+@register.tag('var')
+def do_var(parser, token):
+    """Assign a value to a variable, which will persist within the current scope.
+
     As with the ``with`` tag, this tag expects one or more variable-value pairs. But rather
     than limiting these variables to being used within a tag block, this tag simply overwrites
-    the like-named context variable with the given value. For example, ``{% set one=1 two=2 %}``
-    will set the "one" variable to a value of 1 and 'two' to a value of 2. This gives us more
+    the like-named context variable with the given value. For example, ``{% var one=1 two=2 %}``
+    will set the "one" variable to a value of 1 and "two" to a value of 2. This gives us more
     freedom with our logic. For example, suppose we have the following:
 
     .. code-block::
@@ -879,20 +880,116 @@ def do_set(parser, token):
     We can condense this to the following:
 
     .. code-block::
-        {% if worked %}{% set msg='success' mood='happy' %}{% endif %}
+        {% if worked %}{% var msg='success' mood='happy' %}{% endif %}
         {% include 'my/output/template.html' %}
 
     Also unlike the ``with`` tag, later variables can make use of previous ones within the same
     assignment. For example:
 
     .. code-block::
-        {% set a=2 b=3 c=a|mul:b %}
+        {% var a=2 b=3 c=a|mul:b %}
 
-    "b" here will equal 6.
+    "c" here will equal 6.
 
     :return: an empty string
     """
-    return SetNode(template.base.token_kwargs(token.split_contents()[1:], parser))
+    return VarNode(template.base.token_kwargs(token.split_contents()[1:], parser))
+
+
+
+@register.tag('new_append')
+def do_append(parser, token):
+    """Append the rendered blocks to the given list, creating the list if it doesn't yet exist.
+
+    Suppose we have a template that is expecting a list of items, some of which we expect to include HTML. The
+    standard approach here would be to build this list in a view and then pass it in context. But this is less
+    than ideal. Ideally, we'd construct the list within the template itself just prior to passing it to the
+    template, so that it's immediately clear what we're passing to the template and in what format. This tag
+    makes this possible.
+
+    For example, suppose we have a template that expects a list of two unequal columns, the first containing a
+    photo and the second containing associated post info. Instead of building this list within the view for each
+    post, we can build it directly within the template as follows:
+
+    .. code-block::django
+        {% for post in posts %}
+            {% append 'col_html_list' %}
+                <tr><td class="photo"><img src="{{ post.image.url }}"></td></tr>
+            {% append %}
+                <tr><td class="title">{{ post.title }}</td></tr>
+                <tr><td class="body">{{ post.body }}</td></tr>
+            {% endappend %}
+            {% include 'newsletters/layouts/columns_variable_width.html' column_trs=col_html_list column_widths='180,380' %}
+        {% endfor %}
+
+    This will result in "col_html_list" being created, filled, and passed into the column template all within a
+    few lines of easily understandable code.
+
+    Note that once a list exists within a scope, items will continue to be appended to the existing list unless
+    a "clear" keyword is added to the initial tag. For example, suppose we have the following:
+
+    .. code-block::django
+        {% append 'test' %}One{% append %}Two{% endappend %}
+        {% append 'test' %}Three{% endappend %}
+        {% append 'test' clear %}Four{% append %}Five{% endappend %}
+        Result: {{ test }}
+
+    The resulting value of "test" will be ['Four', 'Five'] because the list ['One', 'Two', 'Three'] is cleared
+    just prior to appending these final two values.
+    """
+
+
+
+@register.tag('new_set')
+def do_set(parser, token):
+    """
+    The rationale behind this tag is identical to that of the ``append tag``, but rather than allowing us to
+    create and append to a list directly within a template, this tag allows us to create and add to a dict in
+    the same manner.
+
+    For example, suppose we have a template that expects an object and that looks something like the following:
+
+    .. code-block::django
+        <table><tr>
+            <td>
+                <div class="title">{{ obj.title|safe }}</div>
+                <div class="body">{{ obj.body|safe }}</div>
+            </td>
+            <td>
+                <div class="photo">{{ obj.image|safe }}</div>
+            </td>
+        </table></tr>
+
+    We might then use the following to populate it:
+
+    .. code-block::django
+        {% for post in posts %}
+            {% set 'html_dict' 'title' %}
+                <b>{{ post.title|upper }}</b>
+            {% set 'body' %}
+                <div class="author">{{ post.author.get_full_name() }}</div>
+                {{ post.body|safe }}
+            {% set 'image' %}
+                <img src="{{ post.image.url }}">
+            {% endset %}
+            {% include 'my_post_format.html' obj=html_dict %}
+        {% endfor %}
+
+    Each ``set`` will set the accompanying key in "html_dict" to the value of the block that follows it, allowing
+    us to create a dict suitable to an existing template inline with the template rather than having to create it
+    within the view and pass it in context.
+
+    As with ``append``, adding a "clear" keyword to the end of the initial tag will clear the existing dict by
+    this name, if it exists, prior to adding any further contents. For example, assuming "html_dict" already
+    exists and has values, the following will clear it prior to adding any further contents:
+
+    .. code-block::django
+        {% set 'html_dict' 'one' clear %}
+            HTML One
+        {% set 'two' %}
+            HTML TWO
+        {% endset %}
+    """
 
 
 

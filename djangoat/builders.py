@@ -29,7 +29,56 @@ class Newsletter(object):
     subject = ''        # the subject line of the email
     text = ''           # a textual version of the email
 
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
+        """
+        This is where we define any base querysets that we'll be using in the creation of the newsletter. For
+        example, we might set this to the following:
+
+        ..  code-block:: python
+
+            {
+                'recent_events': Event.objects.filter(start_date__range=(30_DAYS_AGO, NOW)),
+                'near_events': Event.objects.filter(start_date__range=(NOW, 30_DAYS_FROM_NOW)),
+                'far_events': Event.objects.filter(start_date__gt=30_DAYS_FROM_NOW),
+            }
+
+        Note that we've not limited these querysets to only X items, since we may reuse them from one section to
+        the next and may want varying numbers of items in each. We should think of these as BASE querysets, meant
+        to be filtered and limited as we add each section. For example, when adding a section, we might add the
+        following to that section's ``context``:
+
+        .. code-block:: python
+
+            {
+                'querysets': [
+                    {
+                        'key': 'far_events',
+                        'filter': {
+                            'is_for_kids': 1
+                        },
+                        'limit': 2
+                        'as': 'far_kid_events'
+                    },
+                    {
+                        'key': 'far_events',
+                        'filter': {
+                            'is_for_kids': 0
+                        },
+                        'limit': 1
+                    }
+                ]
+            }
+
+        When we find "querysets" in section context, we'll remove it from context and inject whatever querysets
+        its contents require. Both of the above will start with the "far_events" queryset and build off of that.
+        This first will result in a context variable of "far_kids_events", containing at most 2 event instances,
+        and the second in a context variable of "far_events" (since no "as" was specified), containing at most
+        1 event instance. These will then be marked as used and made available for use in the template.
+
+        See the ``add_section`` method for more on special context keys like "querysets" and limitations on the
+        use of "filter", "exclude", and "limit" for each.
+        """
+        self.querysets = {}
         """
         If I'm populating multiple different sections using the same base queryset, I want to be certain that I
         don't get duplicates of previous sections in later sections. This dict tracks used primary keys by queryset
@@ -45,7 +94,7 @@ class Newsletter(object):
         that section will have their primary keys added to the "books" set, so that they can be excluded from
         subsequent sections.
         """
-        self.used_item_pks = {}
+        self.used_pks_by_class = {}
         """
         This works similarly to ``used_item_pks``, but it tracks items on a per-section basis. For example:
         
@@ -73,7 +122,7 @@ class Newsletter(object):
         If this sections is of a particular type, calculate the final section context by combining that type's
         context with the ``context`` provided and return the result.
 
-        :param context:
+        :param context: context or string type
         :return: the context of the section added
         """
 
@@ -127,14 +176,166 @@ class Newsletter(object):
     def define_section_type(self, type, context):
         """Define a type of section for future reference.
 
+        A type definition is simply a context dict of the same form as one might provide to the ``add_sections``
+        method below. By attaching this dict to the specified ``type``, it becomes reusable making, it the base
+        context dict for all sections of that type.
+
+        For example, suppose we define a section as follows:
+
+        ..  code-block:: python
+
+            builder.define_section_type('numbers_to_ten', {
+                'class': 'numbers',
+                'numbers': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+            })
+
+        We could then add two different numbers sections in a row via the following:
+
+        ..  code-block:: python
+
+            builder.add_section('numbers_to_ten')  # a section that receives only default context for this type
+            builder.add_section({  # a section that merges it's context into the default context for this type
+                'type': 'numbers_to_ten',
+                'class': 'more-numbers',
+                'quote': 'Count the numbers. Don\'t let them count you.'
+            })
+
+        The resulting context dict for the latter section will be:
+
+        ..  code-block:: python
+
+            {
+                'type': 'numbers_to_ten',
+                'class': 'more-numbers',
+                'numbers': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+                'quote': 'Count the numbers. Don\'t let them count you.'
+            }
+
+        There's one exception to this merging. Anything specified in the "items" key of the context dict is
+        assumed to be a queryset, a list of instances, or a string referencing a member of the DATA dict which
+        will result in one of these two things. If we want a section of type X to have one additional set of
+        items to work with, we don't want to have to redeclare the items already defined for that type of
+        section. So rather than overwriting "items", we'll save the items from the type definition, merge in
+        the section items dict, merge the context dicts, and then reassign "items" to the one we saved.
+
+        For example, if a dict of type X is:
+
+        ..  code-block:: python
+
+            {
+                'name:': 'Companies',
+                'items': {
+                    'companies': Company.object.all()
+                }
+            }
+
+        And we add a section of type X like the following:
+
+        ..  code-block:: python
+
+            {
+                'name:': 'Companies With Posts',
+                'items': {
+                    'posts': Post.object.all()
+                }
+            }
+
+        The final context dict will be:
+
+        ..  code-block:: python
+
+            {
+                'name:': 'Companies With Posts',
+                'items': {
+                    'companies': Company.object.all()
+                    'posts': Post.object.all()
+                }
+            }
+
+        But why not just define these querysets in the main dict? We define these separately in "items" because
+        querysets defined under this key have their primary keys automatically recorded in "used_items" dict
+        and excluded
+
+
+
+
+        NEW IDEA
+
+        Instead of having a special "items" dict with unusual behavior pass in querysets as normal. Have builder methods
+        that do excluding / marking instead
+
+        exclude_used method, expects sliced queryset, adds exclude clause, any pks that have been marked as used
+        previously for this querysets meta type will be excluded; i.e. .exclude(pk__in=USED_OF_THIS_META_TYPE)
+
+        mark_used method, expects either queryset or iterable, for each item in iterable take the pk (if it has one)
+        and add it to the list of used items for that meta type. Mark used also keeps a list of per section items
+        used when the current section has a primary key; i.e. [(SECTION_ID, POST_INSTANCE), (SECTION_ID, POST_INSTANCE), ....];
+        returns the queryset
+
+        This approach gives maximum freedom of approach. One approach is to pass already sliced queryset when adding
+        sections, in which case you would call these methods directly when preparing each section's context. Alternatively,
+        since the builder object is passed in context, you can call the methods as they're used in templates; this is
+        a little messier in one sense; but in another allows greater freedom for using type definitions
+
+
+
+
+
+
+
+
+
+
+
+        ..  code-block:: python
+
+            {
+                'type': 'numbers_to_ten',
+                'class': 'more-numbers',
+                'numbers': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+                'quote': 'Count the numbers. Don\'t let them count you.'
+            }
+
+
+
         Sections defined by this method can be referenced by the key "type" within the context provided to
         ``add_sections``. When the value of this key corresponds to a predefined section type, we'll derive the
         context of the section being added by using the type context as a base and merging in the context of
         the just added section, thus simplifying the creation of new sections of the given type.
 
+        Note that section type definitions provided via this method will be available solely to the current
+        newsletter builder instance. To declare
+
         :param type: a string key by which to identify this type of section
         :param context: the default context for all sections of this type
         """
+
+    def exclude_used(self, queryset):
+        """Exclude previously used items from this queryset's model.
+
+        When items are passed to ``mark_as_used``, we'll add their primary keys to a per-model-name dict of
+        lists, each of whose members contains keys previously marked as used for that model. We'll then use
+        that dict in this method to exclude those items from the current queryset, thus avoiding duplicates
+        from one section to the next, even when the same queryset is used.
+
+        :param queryset: a queryset from which to exclude previously used items of the same model
+        :return: the filtered queryset
+        """
+        used_pks = self.used_pks_by_class.get(queryset.model.__name__)
+        return queryset.exclude(pk__in=used_pks) if used_pks else queryset
+
+    def mark_as_used(self, items):
+        """Mark all items with a ``pk`` attribute as used, each according to its model name.
+
+        TODO also add to the current section
+
+        :param items: a queryset, list, tuple, or other iterable containing instances we want to mark as used
+        :return: the ``items`` passed
+        """
+        for item in items:
+            if hasattr(item, 'pk'):  # assume this is a model instance
+                self.used_pks_by_class.setdefault(item.__class__.__name__, []).append(item.pk)
+        return items
 
     def inline_styles(self):
         """Inlines newsletter styles and returns the resulting HTML.

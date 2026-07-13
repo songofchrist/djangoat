@@ -5,8 +5,8 @@ from django.utils.safestring import mark_safe
 from djangoat import DATA
 from djangoat.utils import get_seconds_from_duration_string
 
-from .models import Post
-
+from .builders import NewsletterBuilder
+from .models import Post, Company
 
 
 # FUNCTIONS
@@ -32,6 +32,36 @@ def add_example_table(ctx, func, *args):
 
 
 # VIEWS
+def newsletter_preview(request):
+    builder = NewsletterBuilder()
+    builder.define_section_type('company', {  # a "company" type section
+        'items': {
+            'companies': Company.objects.all()  # use this queryset for "companies"
+        }
+    })
+    builder.define_section_type('post', {  # a "post" type section
+        'items': {
+            'posts': 'posts'  # retrieve our "posts" queryset from DATA['posts']
+        }
+    })
+    builder.define_section_type('mixed', {  # a section with mixed content
+        'items': {
+            'companies': 'companies',  # retrieve our "posts" queryset from DATA['companies']
+            'posts': Post.objects.all()  # use this queryset for "posts"
+        }
+    })
+
+
+
+
+
+    return render(request, 'newsletter_preview.html', {
+        'body': '',
+        'head': ''
+    })
+
+
+
 def template_tags(request):
     DATA.update({
         'cube_func': lambda x: x ** 3,
