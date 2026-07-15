@@ -123,6 +123,48 @@
 
   <h1>Tags</h1>
   <div class="func">
+    <h2><a id="dict">dict</a></h2>
+    <div>{% verbatim %}{% dict DICT_NAME [clear] set KEY1 %}<br> . . .<br>{% set KEY2 %}<br> . . .<br>{% enddict %}{% endverbatim %}</div>
+    <p>This tag sets the given keys of the dict DICT_NAME to the rendered content of each subsequent block. If no
+      such dict exists, it will be created. If the <span class="mono">clear</span> keyword is provided, the dict
+      will be cleared prior to setting values. The primary intent here is to be able to create to allow for the
+      inline creation of an object that might then be passed to an existing template that expects to receive
+      that object, as opposed to that object needing to be created within a view and passed in via context.</p>
+    <table class="examples">
+      <tr>
+        <td><pre><code class="language-django">{% verbatim %}{% dict 'test_dict' set 'one' %}<br>
+  &lt;b&gt;One&lt;/b&gt;<br>
+{% set 'two' %}<br>
+  &lt;i&gt;Two&lt;/i&gt;<br>
+{% enddict %}<br>
+test_dict = {{ test_dict }}<br>
+One: {{ test_dict.one }}<br>
+Two: {{ test_dict.two }}{% endverbatim %}</code></pre></td>
+        <td class="hljs hljs-string">
+          {% dict 'test_dict' set 'one' %}
+            <b>One</b>
+          {% set 'two' %}
+            <i>Two</i>
+          {% enddict %}
+          test_dict = {{ test_dict }}<br>
+          One: {{ test_dict.one }}<br>
+          Two: {{ test_dict.two }}
+        </td>
+      </tr>
+      <tr>
+        <td><pre><code class="language-django">{% verbatim %}{% dict 'test_dict' set 'one' %}One{% set 'two' %}Two{% enddict %}<br>
+{% dict 'test_dict' clear set 'three' %}Three{% set 'four' %}Four{% enddict %}<br>
+test_dict = {{ test_dict }}{% endverbatim %}</code></pre></td>
+        <td class="hljs hljs-string">
+          {% dict 'test_dict' set 'one' %}One{% set 'two' %}Two{% enddict %}
+          {% dict 'test_dict' clear set 'three' %}Three{% set 'four' %}Four{% enddict %}
+          test_dict = {{ test_dict }}</td>
+      </tr>
+    </table>
+  </div>
+
+
+  <div class="func">
     <h2><a id="method">method</a></h2>
     <div>{% verbatim %}{% method OBJECT METHOD ARG1 ARG2 ARG3 . . . %}{% endverbatim %}</div>
     <p>Given an OBJECT, this tag allows us to execute a METHOD on this object and pass it any number of arguments.
