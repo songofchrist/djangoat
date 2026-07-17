@@ -124,7 +124,7 @@
   <h1>Tags</h1>
   <div class="func">
     <h2><a id="dict">dict</a></h2>
-    <div>{% verbatim %}{% dict DICT_NAME [clear] set KEY1 %}<br> . . .<br>{% set KEY2 %}<br> . . .<br>{% enddict %}{% endverbatim %}</div>
+    <div>{% verbatim %}{% dict DICT_NAME [clear] set KEY_1 %} . . . {% set KEY_2 %} . . . {% enddict %}{% endverbatim %}</div>
     <p>This tag sets the given keys of the dict DICT_NAME to the rendered content of each subsequent block. If no
       such dict exists, it will be created. If the <span class="mono">clear</span> keyword is provided, the dict
       will be cleared prior to setting values. The primary intent here is to be able to create to allow for the
@@ -132,20 +132,12 @@
       that object, as opposed to that object needing to be created within a view and passed in via context.</p>
     <table class="examples">
       <tr>
-        <td><pre><code class="language-django">{% verbatim %}{% dict 'test_dict' set 'one' %}<br>
-  &lt;b&gt;One&lt;/b&gt;<br>
-{% set 'two' %}<br>
-  &lt;i&gt;Two&lt;/i&gt;<br>
-{% enddict %}<br>
+        <td><pre><code class="language-django">{% verbatim %}{% dict 'test_dict' set 'one' %}&lt;b&gt;One&lt;/b&gt;{% set 'two' %}&lt;i&gt;Two&lt;/i&gt;{% enddict %}<br>
 test_dict = {{ test_dict }}<br>
 One: {{ test_dict.one }}<br>
 Two: {{ test_dict.two }}{% endverbatim %}</code></pre></td>
         <td class="hljs hljs-string">
-          {% dict 'test_dict' set 'one' %}
-            <b>One</b>
-          {% set 'two' %}
-            <i>Two</i>
-          {% enddict %}
+          {% dict 'test_dict' set 'one' %}<b>One</b>{% set 'two' %}<i>Two</i>{% enddict %}
           test_dict = {{ test_dict }}<br>
           One: {{ test_dict.one }}<br>
           Two: {{ test_dict.two }}
@@ -159,6 +151,35 @@ test_dict = {{ test_dict }}{% endverbatim %}</code></pre></td>
           {% dict 'test_dict' set 'one' %}One{% set 'two' %}Two{% enddict %}
           {% dict 'test_dict' clear set 'three' %}Three{% set 'four' %}Four{% enddict %}
           test_dict = {{ test_dict }}</td>
+      </tr>
+    </table>
+  </div>
+
+
+  <div class="func">
+    <h2><a id="list">list</a></h2>
+    <div>{% verbatim %}{% list LIST_NAME [clear] append %} . . . {% append %} . . . {% endlist %}
+      <br><b>--- OR ---</b><br>{% list LIST_NAME set INDEX %} . . . {% set INDEX %} . . . {% endlist %}{% endverbatim %}</div>
+    <p>This tag operates on an existing list LIST_NAME from context (or creates the list if no such list exists).
+      It supports two operations: "append" and "set". The "append" operation will append the rendered block that
+      immediately follows to the list. The "set" operation will set the item at the given index to the value of
+      the subsequent block. Operations may not be mixed.</p>
+    <table class="examples">
+      <tr>
+        <td><pre><code class="language-django">{% verbatim %}{% list 'test_list' append %}&lt;b&gt;One&lt;/b&gt;{% append %}&lt;i&gt;Two&lt;/i&gt;{% endlist %}<br>
+test_list = {{ test_list }}<br>
+{% list 'test_list' set 0 %}&lt;b&gt;SUBSTITUTE&lt;/b&gt;{% endlist %}<br>
+altered_test_list = {{ test_list }}<br>
+{% list 'test_list' clear append %}&lt;b&gt;Three&lt;/b&gt;{% append %}&lt;i&gt;Four&lt;/i&gt;{% endlist %}<br>
+replaced_test_list = {{ test_list }}{% endverbatim %}</code></pre></td>
+        <td class="hljs hljs-string">
+          {% list 'test_list' append %}<b>One</b>{% append %}<i>Two</i>{% endlist %}
+          test_list = {{ test_list }}<br>
+          {% list 'test_list' set 0 %}<b>SUBSTITUTE</b>{% endlist %}
+          altered_test_list = {{ test_list }}<br>
+          {% list 'test_list' clear append %}<b>Three</b>{% append %}<i>Four</i>{% endlist %}
+          replaced_test_list = {{ test_list }}
+        </td>
       </tr>
     </table>
   </div>

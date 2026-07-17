@@ -31,8 +31,8 @@ class Newsletter(object):
 
     def __init__(self, *args, **kwargs):
         """
-        This is where we define any base querysets that we'll be using in the creation of the newsletter. For
-        example, we might set this to the following:
+        ``base_querysets`` is where we define any querysets that we'll be using in the creation of the
+        newsletter. For example, we might set this to the following:
 
         ..  code-block:: python
 
@@ -43,9 +43,9 @@ class Newsletter(object):
             }
 
         Note that we've not limited these querysets to only X items, since we may reuse them from one section to
-        the next and may want varying numbers of items in each. We should think of these as BASE querysets, meant
-        to be filtered and limited as we add each section. For example, when adding a section, we might add the
-        following to that section's ``context``:
+        the next and may want varying numbers of items in each. These are BASE QUERYSETS meant to be filtered and
+        limited as we add each section. For example, when adding a section, we might add the following to that
+        section's ``context``:
 
         .. code-block:: python
 
@@ -61,8 +61,8 @@ class Newsletter(object):
                     },
                     {
                         'key': 'far_events',
-                        'filter': {
-                            'is_for_kids': 0
+                        'exclude': {
+                            'is_for_kids': 1
                         },
                         'limit': 1
                     }
@@ -78,7 +78,7 @@ class Newsletter(object):
         See the ``add_section`` method for more on special context keys like "querysets" and limitations on the
         use of "filter", "exclude", and "limit" for each.
         """
-        self.querysets = {}
+        self.base_querysets = {}
         """
         If I'm populating multiple different sections using the same base queryset, I want to be certain that I
         don't get duplicates of previous sections in later sections. This dict tracks used primary keys by queryset
@@ -94,16 +94,19 @@ class Newsletter(object):
         that section will have their primary keys added to the "books" set, so that they can be excluded from
         subsequent sections.
         """
-        self.used_pks_by_class = {}
+        self.used_item_pks_by_model_class = {}
         """
-        This works similarly to ``used_item_pks``, but it tracks items on a per-section basis. For example:
+        This works similarly to ``used_item_pks_by_class``, but it tracks items on a per-section basis. For
+        example:
         
         {
             SECTION_1_KEY : {
+                'ALL': [],
                 'books': set(),
                 'posts': set()
             }
             SECTION_2_KEY : {
+                'ALL': [],
                 'events': set(),
                 'posts': set()
             }
@@ -114,7 +117,7 @@ class Newsletter(object):
         content appeared in a given newsletter, so that it can be used to determine the content of future
         sends.
         """
-        self.used_item_pks_by_section = {}
+        self.used_items_by_section_key = {}
 
     def add_section(self, context):
         """Register a new section to the newsletter builder.

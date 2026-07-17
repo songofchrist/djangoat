@@ -718,6 +718,7 @@ def _get_cache_frag_node(parser, token, tag, user=False, site=False):
     )
 
 
+
 @register.tag
 def cache(parser, token):
     """Creates a `CacheFrag`_ record, if needed, and returns cached content.
@@ -792,6 +793,216 @@ def cache(parser, token):
     admin and want all fragments on that page refreshed, so that we can see the most up-to-date version of it.
     """
     return _get_cache_frag_node(parser, token, 'cache')
+
+
+
+class DictNode(template.Node):
+    def __init__(self, name, nodelists, clear):
+        self.name = name
+        self.nodelists = nodelists  # takes the form (KEY, NODELIST)
+        self.clear = clear
+
+    def render(self, context):
+        dct = context.setdefault(self.name, {})
+        if self.clear and dct:  # clear prior to making new assignments
+            dct.clear()
+        for key, nodelist in self.nodelists:
+            dct[key] = nodelist.render(context)
+        return ''
+
+@register.tag('dict')
+def do_dict(parser, token):
+    """
+    The rationale behind this tag is identical to that of the ``list tag``, but rather than allowing us to
+    create and append to a list directly within a template, this tag allows us to create and add to a dict in
+    the same manner.
+
+    For example, suppose we have a template "my_post_format.html" that expects an object and that looks
+    something like the following:
+
+    .. code-block::django
+        <table><tr>
+            <td>
+                <div class="title">{{ obj.title|safe }}</div>
+                <div class="body">{{ obj.body|safe }}</div>
+            </td>
+            <td>
+                <div class="photo">{{ obj.image|safe }}</div>
+            </td>
+        </tr></table>
+
+    We might then use the following to render it:
+
+    .. code-block::django
+        {% for post in posts %}
+            {% dict 'html_dict' set 'title' %}
+                <b>{{ post.title|upper }}</b>
+            {% set 'body' %}
+                <div class="author">{{ post.author.get_full_name() }}</div>
+                {{ post.body|safe }}
+            {% set 'image' %}
+                <img src="{{ post.image.url }}">
+            {% endset %}
+            {% include 'my_post_format.html' obj=html_dict %}
+        {% endfor %}
+
+    Each ``set`` will set the associated key in "html_dict" to the value of the block that follows it, allowing
+    us to create a dict suitable to an existing template inline with the template rather than having to create it
+    within the view and pass it in context.
+
+    As with ``list``, adding a "clear" keyword prior to the ``set`` keyword of the initial tag will clear any dict
+    with this name currently in context, if it exists, prior to adding any further contents. For example, assuming
+    "html_dict" already exists and has values, the following will clear it prior to adding any further contents:
+
+    .. code-block::django
+        {% dict 'html_dict' clear set 'one' %}
+            HTML One
+        {% set 'two' %}
+            HTML TWO
+        {% endset %}
+
+    Note that the dict name and all keys must be string literals. Variable dict names and keys are not permitted.
+    """
+    _clear, _op = 'clear', 'set'
+    clear = error = key = name = False
+    bits = token.split_contents()[1:]
+    if len(bits) == 3:
+        name, _op, key = bits
+    elif len(bits) == 4:
+        name, _clear, _op, key = bits
+        clear = True
+    else:
+        error = True
+    if _op != 'set' or _clear != 'clear':
+        error = True
+    if error:
+        raise TemplateSyntaxError('Opening "dict" tags take the form {%% dict DICT_NAME [clear] set KEY %%};'
+                                  ' you entered {%% %s %%}' % token.contents)
+    nodelists = [(key[1:-1], parser.parse(('set', 'enddict')))]  # a list of (DICT_KEY, NODELIST) tuples
+    token = parser.next_token()
+    while token.contents.startswith('set'):
+        bits = token.split_contents()
+        if len(bits) != 2:
+            raise TemplateSyntaxError('Post-opening "dict" tags take the form {%% set KEY %%}; you entered'
+                                      ' {%% %s %%}' % token.contents)
+        nodelists.append((bits[1][1:-1], parser.parse(('set', 'enddict'))))
+        token = parser.next_token()
+    return DictNode(name[1:-1], nodelists, clear)
+
+
+
+class ListNode(template.Node):
+    def __init__(self, name, operation, nodelists, clear):
+        self.name = name
+        self.operation = operation  # "append" or "set"
+        self.nodelists = nodelists  # items take the form NODELIST for "append" or (INDEX, NODELIST) for "set"
+        self.clear = clear
+
+    def render(self, context):
+        lst = context.setdefault(self.name, [])
+        if self.operation == 'append':
+            if self.clear and lst:  # clear prior to making new assignments
+                lst.clear()
+            for nodelist in self.nodelists:
+                lst.append(nodelist.render(context))
+        else:  # set
+            for i, nodelist in self.nodelists:
+                lst[i] = nodelist.render(context)
+        return ''
+
+@register.tag('list')
+def do_list(parser, token):
+    """Append or assign the rendered blocks to the given list, creating the list if it doesn't yet exist.
+
+    Suppose we have a template that is expecting a list of items, some of which we expect to include HTML. The
+    standard approach here would be to build this list in a view and then pass it in context. But this is less
+    than ideal. Ideally, we'd construct the list within the template itself just prior to passing it to the
+    template, so that it's immediately clear what we're passing to the template and in what format. This tag
+    makes this possible.
+
+    For example, suppose we have a template that expects a list of two unequal columns, the first containing a
+    photo and the second containing associated post info. Instead of building this list within the view for each
+    post, we can build it directly within the template as follows:
+
+    .. code-block::django
+        {% for post in posts %}
+            {% list 'col_html_list' append %}
+                <tr><td class="photo"><img src="{{ post.image.url }}"></td></tr>
+            {% append %}
+                <tr><td class="title">{{ post.title }}</td></tr>
+                <tr><td class="body">{{ post.body }}</td></tr>
+            {% endlist %}
+            {% include 'newsletters/layouts/columns_variable_width.html' column_trs=col_html_list column_widths='180,380' %}
+        {% endfor %}
+
+    This will result in "col_html_list" being created, filled, and passed into the column template all within a
+    few lines of easily understandable code.
+
+    Note that once a list exists within a scope, items will continue to be appended to the existing list unless
+    a "clear" keyword is added to the initial tag. For example, suppose we have the following:
+
+    .. code-block::django
+        {% list 'test' append %}One{% append %}Two{% append %}Three{% endlist %}
+        {% list 'test' clear append %}Four{% append %}Five{% endlist %}
+        Result: {{ test }}
+
+    The resulting value of "test" will be ['Four', 'Five'] because the list ['One', 'Two', 'Three'] is cleared
+    just prior to appending these final two values.
+
+    Finally, if only a particular index needs to be overwritten, we can use "set INDEX" in place of "append". Say,
+    for example, we have an existing list of five items and only want to alter the third and fourth items. We could
+    use the following:
+
+    .. code-block::django
+        {% list 'test' set 2 %}
+            Item #3 at index #2
+        {% set 3 %}
+            Item #4 at index #3
+        {% endlist %}
+
+    This will overwrite the items at indices 2 and 3 with the rendered content of each subsequent block.
+
+    Things to note:
+    - The list name must be a string literal and indices must be integers; variable are not allowed
+    - To avoid confusion, only the operation used in the initial tag may be used in subsequent tags. "append"
+      and "set" operations cannot be mixed.
+    - Any list items assigned via "set" must already exist in the list to avoid an index out of range error.
+    - The "clear" keyword may only be used with "append", since clearing and then setting by index would result
+      in an error.
+    """
+    _clear = clear = error = i = name = op = False
+    bits = token.split_contents()[1:]
+    if len(bits) == 2:
+        name, op = bits  # append
+    elif len(bits) == 3:
+        if bits[1] == 'clear':
+            name, _clear, op = bits  # append
+            clear = True
+        else:
+            name, op, i = bits  # set
+    else:
+        error = True
+    if error or (op not in ('append', 'set')) or (op == 'append' and (i or (clear and _clear != 'clear'))) or (op == 'set' and (not i or not i.isnumeric())):
+        raise TemplateSyntaxError('Opening "list" tags take the form {%% list LIST_NAME [clear] append %%} or'
+                                  ' {%% list LIST_NAME set INDEX %%}; you entered {%% %s %%}' % token.contents)
+    if op == 'append':
+        nodelists = [parser.parse(('append', 'endlist'))]
+        token = parser.next_token()
+        while token.contents == 'append':
+            nodelists.append(parser.parse(('append', 'endlist')))
+            token = parser.next_token()
+    else:
+        nodelists = [(int(i), parser.parse(('set', 'endlist')))]
+        token = parser.next_token()
+        while token.contents.startswith('set'):
+            i = token.split_contents()[1]
+            if not i.isnumeric():
+                raise TemplateSyntaxError('Post-opening "list" tags take the form {%% set INDEX %%} setting an'
+                                          ' index of an existing list; you entered {%% %s %%}' % token.contents)
+            nodelists = [(int(i), parser.parse(('set', 'endlist')))]
+            token = parser.next_token()
+    return ListNode(name[1:-1], op, nodelists, clear)
+
 
 
 class MapNode(Node):
@@ -894,200 +1105,6 @@ def do_var(parser, token):
     :return: an empty string
     """
     return VarNode(template.base.token_kwargs(token.split_contents()[1:], parser))
-
-
-
-@register.tag('new_append')
-def do_append(parser, token):
-    """Append or assign the rendered blocks to the given list, creating the list if it doesn't yet exist.
-
-    Suppose we have a template that is expecting a list of items, some of which we expect to include HTML. The
-    standard approach here would be to build this list in a view and then pass it in context. But this is less
-    than ideal. Ideally, we'd construct the list within the template itself just prior to passing it to the
-    template, so that it's immediately clear what we're passing to the template and in what format. This tag
-    makes this possible.
-
-    For example, suppose we have a template that expects a list of two unequal columns, the first containing a
-    photo and the second containing associated post info. Instead of building this list within the view for each
-    post, we can build it directly within the template as follows:
-
-    .. code-block::django
-        {% for post in posts %}
-            {% list 'col_html_list' append %}
-                <tr><td class="photo"><img src="{{ post.image.url }}"></td></tr>
-            {% append %}
-                <tr><td class="title">{{ post.title }}</td></tr>
-                <tr><td class="body">{{ post.body }}</td></tr>
-            {% endlist %}
-            {% include 'newsletters/layouts/columns_variable_width.html' column_trs=col_html_list column_widths='180,380' %}
-        {% endfor %}
-
-    This will result in "col_html_list" being created, filled, and passed into the column template all within a
-    few lines of easily understandable code.
-
-    Note that once a list exists within a scope, items will continue to be appended to the existing list unless
-    a "clear" keyword is added to the initial tag. For example, suppose we have the following:
-
-    .. code-block::django
-        {% list 'test' append %}One{% append %}Two{% append %}Three{% endlist %}
-        {% list 'test' clear append %}Four{% append %}Five{% endlist %}
-        Result: {{ test }}
-
-    The resulting value of "test" will be ['Four', 'Five'] because the list ['One', 'Two', 'Three'] is cleared
-    just prior to appending these final two values.
-
-    Finally, if only a particular index needs to be overwritten, we can use "set INDEX" in place of "append". Say,
-    for example, we have an existing list of five items and only want to alter the third and fourth items. We could
-    use the following:
-
-    .. code-block::django
-        {% list 'test' set 2 %}
-            Item #3 at index #2
-        {% set 3 %}
-            Item #4 at index #3
-        {% endlist %}
-
-    This will overwrite the items at indices 2 and 3 with the rendered content of each subsequent block.
-
-    Note that only the operation specified in the initial tag may be performed on each subsequent block. If
-    "append" is used in the initial tag, "set" cannot be used thereafter, and vice-versa.
-    """
-    _append, _clear = _op = _set, clear = error = i = name = False
-    bits = token.split_contents()[1:]
-    if len(bits) == 2:
-        name, _op = bits  # append
-    elif len(bits) == 3:
-        if bits[1] == 'clear':
-            name, _clear, _op = bits  # append
-        else:
-            name, _op, i = bits  # set
-    elif len(bits) == 4:
-        name, _clear, _op, i = bits  # set
-    else:
-        error = True
-    if error or (_clear and _clear != 'clear') or (_op == 'append' and i) or (_op == 'set' and (not i or not i.isnumeric())):
-        raise TemplateSyntaxError('Opening "list" tags take the form {%% list LIST_NAME [clear] append %%} or'
-                                  ' {%% list LIST_NAME [clear] set INDEX %%}; you entered {%% %s %%}' % token.contents)
-
-    if _clear == 'clear':
-        clear = True
-
-
-
-
-    else:
-        error = True
-    if _append != 'append' or _clear != 'clear':
-        error = True
-    if error:
-        raise TemplateSyntaxError('Opening "list" tags take the form {%% list LIST_NAME [clear] append %%} or'
-                                  ' {%% list LIST_NAME [clear] set INDEX %%}; you entered {%% %s %%}' % token.contents)
-    key_nodelists = [(key[1:-1], parser.parse(('set', 'enddict')))]  # a list of (DICT_KEY, NODELIST) tuples
-    token = parser.next_token()
-    while token.contents.startswith('set'):
-        bits = token.split_contents()
-        if len(bits) != 2:
-            raise TemplateSyntaxError('Post-opening "list" tags take the form {%% append %%} or {%% set INDEX %%};'
-                                      ' you entered {%% %s %%}' % token.contents)
-        key_nodelists.append((bits[1][1:-1], parser.parse(('set', 'enddict'))))
-        token = parser.next_token()
-    return ListNode(name[1:-1], key_nodelists, clear)
-
-
-
-class DictNode(template.Node):
-    def __init__(self, name, key_nodelists, clear):
-        self.name = name
-        self.key_nodelists = key_nodelists  # takes the form (KEY, NODELIST)
-        self.clear = clear
-
-    def render(self, context):
-        dct = context.setdefault(self.name, {})
-        if self.clear and dct:  # clear prior to making new assignments
-            dct.clear()
-        for key, nodelist in self.key_nodelists:
-            dct[key] = nodelist.render(context)
-        return ''
-
-@register.tag('dict')
-def do_dict(parser, token):
-    """
-    The rationale behind this tag is identical to that of the ``list tag``, but rather than allowing us to
-    create and append to a list directly within a template, this tag allows us to create and add to a dict in
-    the same manner.
-
-    For example, suppose we have a template "my_post_format.html" that expects an object and that looks
-    something like the following:
-
-    .. code-block::django
-        <table><tr>
-            <td>
-                <div class="title">{{ obj.title|safe }}</div>
-                <div class="body">{{ obj.body|safe }}</div>
-            </td>
-            <td>
-                <div class="photo">{{ obj.image|safe }}</div>
-            </td>
-        </tr></table>
-
-    We might then use the following to render it:
-
-    .. code-block::django
-        {% for post in posts %}
-            {% dict 'html_dict' set 'title' %}
-                <b>{{ post.title|upper }}</b>
-            {% set 'body' %}
-                <div class="author">{{ post.author.get_full_name() }}</div>
-                {{ post.body|safe }}
-            {% set 'image' %}
-                <img src="{{ post.image.url }}">
-            {% endset %}
-            {% include 'my_post_format.html' obj=html_dict %}
-        {% endfor %}
-
-    Each ``set`` will set the associated key in "html_dict" to the value of the block that follows it, allowing
-    us to create a dict suitable to an existing template inline with the template rather than having to create it
-    within the view and pass it in context.
-
-    As with ``list``, adding a "clear" keyword prior to the ``set`` keyword of the initial tag will clear any dict
-    with this name currently in context, if it exists, prior to adding any further contents. For example, assuming
-    "html_dict" already exists and has values, the following will clear it prior to adding any further contents:
-
-    .. code-block::django
-        {% dict 'html_dict' clear set 'one' %}
-            HTML One
-        {% set 'two' %}
-            HTML TWO
-        {% endset %}
-
-    Note that the dict name and all keys must be string literals. Variable dict names and keys are not permitted.
-    """
-    _clear, _set = 'clear', 'set'
-    clear = error = key = name = False
-    bits = token.split_contents()[1:]
-    if len(bits) == 3:
-        name, _set, key = bits
-    elif len(bits) == 4:
-        name, _clear, _set, key = bits
-        if _clear == 'clear':
-            clear = True
-    else:
-        error = True
-    if _set != 'set' or _clear != 'clear':
-        error = True
-    if error:
-        raise TemplateSyntaxError('Opening "dict" tags take the form {%% dict DICT_NAME [clear] set KEY %%};'
-                                  ' you entered {%% %s %%}' % token.contents)
-    key_nodelists = [(key[1:-1], parser.parse(('set', 'enddict')))]  # a list of (DICT_KEY, NODELIST) tuples
-    token = parser.next_token()
-    while token.contents.startswith('set'):
-        bits = token.split_contents()
-        if len(bits) != 2:
-            raise TemplateSyntaxError('Post-opening "dict" tags take the form {%% set KEY %%}; you entered'
-                                      ' {%% %s %%}' % token.contents)
-        key_nodelists.append((bits[1][1:-1], parser.parse(('set', 'enddict'))))
-        token = parser.next_token()
-    return DictNode(name[1:-1], key_nodelists, clear)
 
 
 
