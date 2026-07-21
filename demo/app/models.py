@@ -1,5 +1,9 @@
 from django.db import models
 
+from djangoat.builders import Newsletter
+from djangoat.db.fields import PrettyJSONField
+
+
 
 
 class Company(models.Model):
@@ -14,6 +18,40 @@ class Company(models.Model):
 
     def __str__(self):
         return self.title
+
+
+
+class NewsletterBaseSection(models.Model):
+    padding_top = models.PositiveSmallIntegerField(null=True, blank=True,
+        help_text='Pixels to add to the section top; defaults to 8')
+    padding_sides = models.PositiveSmallIntegerField(null=True, blank=True,
+        help_text='Pixels to add to the section left and right; defaults to 12')
+    padding_bottom = models.PositiveSmallIntegerField(null=True, blank=True,
+        help_text='Pixels to add to the section bottom; defaults to 8')
+    vertical_spacing = models.PositiveSmallIntegerField(null=True, blank=True,
+        help_text='Pixels between items vertically, whether in fixed layouts or responsive; this must be even;'
+                  ' defaults to the value of "padding top"')
+    horizontal_spacing = models.PositiveSmallIntegerField(null=True, blank=True,
+        help_text='Pixels between items horizontally in whatever layout requires it; this must be even;'
+                  ' defaults to the value of "padding sides"')
+    context = PrettyJSONField(null=True, blank=True)
+
+    class Meta:
+        abstract = True
+
+# class Newsletter(models.Model):
+#     pass
+#
+#
+#
+# class NewsletterSection(models.Model):
+#     pass
+
+
+
+class NewsletterSectionType(NewsletterBaseSection):
+    section_type_only = models.CharField(max_length=100, null=True, blank=True)
+    pass
 
 
 
@@ -57,3 +95,9 @@ class Tag(models.Model):
 
     def __str__(self):
         return self.title
+
+
+# TODO make Newsletter, NewsletterSection, NewsletterSectionType models
+# TODO build newsletter_preview (basically make a functioning system that can be modeled after)
+# TODO at end of preview, show html within textarea, so it can be copied / pasted
+# TODO make a ? clickable button for each section; when clicked show the json object used to create the section in one text area and the html for that section in another textarea

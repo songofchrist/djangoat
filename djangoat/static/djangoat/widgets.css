@@ -1,0 +1,21 @@
+/* For use with the MonoTextarea widget */
+.dg-mono {
+  background: #333;
+  color: white;
+  font-family: monospace;
+}
+
+/* For use with the PrettyJSONTextarea widget; the border will go red when the JSON entered is invalid */
+.dg-json {
+  border: 5px solid green;
+}
+.dg-json.error {
+  border-color: red;
+}
+.dg-json-emsg {
+  background: #fdd;
+  border-radius: 5px;
+  color: red;
+  margin-top: 5px;
+  padding: 12px;
+}

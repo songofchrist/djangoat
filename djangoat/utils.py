@@ -38,6 +38,7 @@ from . import DATA
 
 
 
+# FUNCTIONS
 def get(obj, *keys):
     """Returns the targeted value or None.
 

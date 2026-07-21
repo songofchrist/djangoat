@@ -77,6 +77,8 @@ class Newsletter(object):
 
         See the ``add_section`` method for more on special context keys like "querysets" and limitations on the
         use of "filter", "exclude", and "limit" for each.
+
+        TODO in querysets, use the string dates developed for cache to denote +/- time (i.e. 'start_date': '+90d')
         """
         self.base_querysets = {}
         """
