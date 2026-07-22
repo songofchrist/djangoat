@@ -21,7 +21,8 @@ class _PrettyJSONEncoder(json.JSONEncoder):
         super().__init__(*args, **kwargs)
 
 class PrettyJSONField(models.JSONField):
-    """A JSON field that presents JSON in a more readable manner and validates JSON in real time."""
+    """A JSON field that presents JSON in a more readable manner, validates JSON in real time, and helps with
+    completion."""
     def __init__(self, *args, **kwargs):
         super().__init__(*args, encoder=kwargs.pop('encoder', _PrettyJSONEncoder), **kwargs)
 

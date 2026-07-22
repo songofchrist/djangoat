@@ -1,0 +1,5 @@
+{% extends 'newsletters/sections/_.html' %}
+{% block content %}<table><tbody><tr>
+  <td style="padding:{{ content_padding_top }}px {{ content_padding_sides }}px {{ content_padding_bottom }}px"
+      class="content {{ content_class|default:'' }}">{{ content }}</td>
+</tr></tbody></table>{% endblock %}

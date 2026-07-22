@@ -12,10 +12,3 @@
 .dg-json.error {
   border-color: red;
 }
-.dg-json-emsg {
-  background: #fdd;
-  border-radius: 5px;
-  color: red;
-  margin-top: 5px;
-  padding: 12px;
-}

@@ -1,0 +1,9 @@
+{% extends 'newsletters/sections/_.html' %}
+{% load newsletter %}
+{% block content %}<table><tbody><tr>
+  <td style="padding:{{ content_padding_top }}px {{ content_padding_sides }}px {{ content_padding_bottom }}px"
+      class="content {{ content_class|default:'' }}">
+    {% record items items_limit|default:3 %}
+    {% for item in items %}{% include layout_template with item=item|layout_item %}{% endfor %}
+  </td>
+</tr></tbody></table>{% endblock %}

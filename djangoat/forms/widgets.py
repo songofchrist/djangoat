@@ -10,7 +10,7 @@ class MonoTextarea(Textarea):
         super().__init__(attrs)
 
     class Media:
-        css = {'all': ('djangoat/widgets.css',)}
+        css = {'all': ('djangoat/_.css', 'djangoat/widgets.css')}
 
 
 
