@@ -1,0 +1,9 @@
+{% load djangoat %}
+{% var hr_pct_width=hr_pct_width|default:100 remaining=100|sub:hr_pct_width half=remaining|div:2 %}
+<table style="width:100%"><tbody><tr>
+  <td style="width:{{ half|default:0 }}%"></td>
+  <td style="font-size:0;width:{{ hr_pct_width|default:100 }}%">
+    <table class="hr" style="width:100%"><tbody><tr><td></td></tr></tbody></table>
+  </td>
+  <td style="width:{{ half|default:0 }}%"></td>
+</tr></tbody></table>

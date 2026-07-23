@@ -7,6 +7,11 @@ from djangoat.utils import get_json_file_contents
 
 
 
+class NewsletterBuilderError(Exception):
+    pass
+
+
+
 class Newsletter(object):
     """Aids in constructing basic section-based newsletters that will look as expected in a variety of clients.
 
@@ -29,7 +34,35 @@ class Newsletter(object):
     subject = ''        # the subject line of the email
     text = ''           # a textual version of the email
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, default_context=None):
+        """
+        The default context provided to the builder at initialization will be used as the base for all
+        section contexts throughout the newsletter. This is especially helpful if we want to specify global
+        defaults, as it will save us from entering these values on a per-section basis. For example, we
+        might provide the following to set global padding for all sections:
+
+        ..  code-block:: python
+            {
+                "padding_top": 8,
+                "padding_sides": 16,
+                "padding_bottom": 8
+            }
+
+        Now all sections will inherit these settings for section padding instead of defaults. If we then
+        come to a section where we want different padding (i.e. full width / height header or footer), we
+        can use that section's context to override these settings just for that section.
+        """
+        for k in ('template', 'querysets'):
+            if k in default_context:
+                raise NewsletterBuilderError(f'The "{k}" key is not allowed in default newsletter context;'
+                                             ' it may only be used with sections and section types.')
+        self.default_context = {
+            'padding_top': 4,
+            'padding_sides': 6,
+            'padding_bottom': 4,
+        }
+        if default_context:
+            self.default_context.update(default_context)
         """
         ``base_querysets`` is where we define any querysets that we'll be using in the creation of the
         newsletter. For example, we might set this to the following:
@@ -56,61 +89,72 @@ class Newsletter(object):
                         'filter': {
                             'is_for_kids': 1
                         },
-                        'limit': 2
                         'as': 'far_kid_events'
                     },
                     {
                         'key': 'far_events',
                         'exclude': {
                             'is_for_kids': 1
-                        },
-                        'limit': 1
+                        }
                     }
                 ]
             }
 
         When we find "querysets" in section context, we'll remove it from context and inject whatever querysets
         its contents require. Both of the above will start with the "far_events" queryset and build off of that.
-        This first will result in a context variable of "far_kids_events", containing at most 2 event instances,
-        and the second in a context variable of "far_events" (since no "as" was specified), containing at most
-        1 event instance. These will then be marked as used and made available for use in the template.
+        This first will result in a context variable of "far_kids_events" and the second in a context variable
+        of "far_events" (since no "as" was specified).
 
         See the ``add_section`` method for more on special context keys like "querysets" and limitations on the
-        use of "filter", "exclude", and "limit" for each.
+        use of "filter" and "exclude" for each.
 
         TODO in querysets, use the string dates developed for cache to denote +/- time (i.e. 'start_date': '+90d')
         """
         self.base_querysets = {}
+        """
+        Here we have a dict of default contexts, each assigned to a unique key that we're associating with a
+        type of section. These can be set via the ``set_section_type`` method. Once registered, any section
+        added via the ``add_section`` method will be able to reference this by passing a "type" key in context
+        that corresponds to the key of a section type. That section type's default context will then be used
+        as a base for the final section context used to construct the section.
+        """
+        self.section_types = {}
+        """
+        The sections list below will contain a list of the final contexts that will be used by the builder to
+        assemble the newsletter after all sections have been added. It may also be referenced after the ``build``
+        method is called, so that 
+        """
+        self.sections = []
         """
         If I'm populating multiple different sections using the same base queryset, I want to be certain that I
         don't get duplicates of previous sections in later sections. This dict tracks used primary keys by queryset
         type. For example:
 
         {
-            'books': set(),
-            'events': set(),
-            'posts': set()
+            'Book': set(),
+            'Event': set(),
+            'Post': set()
         }
 
-        When we pass a queryset keyed to "books" into a section's context, any of these that are rendered in
-        that section will have their primary keys added to the "books" set, so that they can be excluded from
-        subsequent sections.
+        When we record queryset via the ``record`` template tag, the primary key for each recorded item will be
+        added to the appropriate set based on its model. Thus we'll know that these have already appeared in the
+        newsletter and to exclude them from subsequent sections.
         """
         self.used_item_pks_by_model_class = {}
         """
-        This works similarly to ``used_item_pks_by_class``, but it tracks items on a per-section basis. For
+        This works similarly to ``used_item_pks_by_model_class``, but it tracks items on a per-section basis. For
         example:
         
         {
-            SECTION_1_KEY : {
+            SECTION_1_KEY: {
                 'ALL': [],
-                'books': set(),
-                'posts': set()
+                'Book': set(),
+                'Post': set()
             }
-            SECTION_2_KEY : {
+            SECTION_2_KEY: {
                 'ALL': [],
-                'events': set(),
-                'posts': set()
+                'Event': set(),
+                'Post': set()
             }
         }
         
@@ -122,14 +166,19 @@ class Newsletter(object):
         self.used_items_by_section_key = {}
 
     def add_section(self, context):
-        """Register a new section to the newsletter builder.
+        """Register a new section with the newsletter builder.
 
-        If this sections is of a particular type, calculate the final section context by combining that type's
+        If this section is of a particular type, we'll use that section type's default context as a basis for
+        this section (this also takes into account the default context of the overall newsletter). If it has
+        no type, then we'll use the overall newsletter's default context as a basis.
+
+        calculate the final section context by combining that type's
         context with the ``context`` provided and return the result.
 
         :param context: context or string type
         :return: the context of the section added
         """
+
 
     def build(self, preview=False):
         """Generate newsletter html and other related values.
@@ -356,6 +405,34 @@ class Newsletter(object):
         :return: the resulting inlined HTML
         """
         return self.html
+
+    def set_section_type(self, key, default_context):
+        """Sets a default context for sections with the given type key.
+
+        Here we associate the default context of a particular section type with a key unique to that type,
+        so that it can be referenced via the "type" key within a particular section's context. For example,
+        suppose we do the following:
+
+        ..  code-block:: python
+            builder.set_section_type('dual_column_posts', DUAL_COLUMN_POST_CONTEXT)
+            builder.set_section_type('full_width_ad', FULL_WIDTH_AD_CONTEXT)
+
+        We may then do the following to inherit the context of this section types in sections keyed to
+        this type:
+
+        ..  code-block:: python
+            builder.add_section({"type": "dual_column_posts", "heading": "Trending News", . . .})
+            builder.add_section({"type": "full_width_ad", . . .})
+            builder.add_section({"type": "dual_column_posts", "heading": "General Awesomeness", . . .})
+
+        :param key: a unique key that identifies this section type
+        :param default_context: the default context for this type of section
+        """
+        for k in ('type',):
+            if k in default_context:
+                raise NewsletterBuilderError(f'The "{k}" key is not allowed in default section type'
+                                             ' context; it may only be used with sections.')
+        self.section_types[key] = {**self.default_context, **default_context}
 
 
 

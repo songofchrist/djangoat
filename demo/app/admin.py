@@ -3,7 +3,9 @@ from django.contrib import admin
 from djangoat.admin import CacheFragAdmin
 from djangoat.models import CacheFrag
 
-from .models import Company, NewsletterSectionType, Post, Tag
+from .models import Company, Post, Tag
+from newsletters.models import NewsletterSectionType
+
 
 
 
