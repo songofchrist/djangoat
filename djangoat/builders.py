@@ -120,11 +120,17 @@ class Newsletter(object):
         """
         self.section_types = {}
         """
-        The sections list below will contain a list of the final contexts that will be used by the builder to
-        assemble the newsletter after all sections have been added. It may also be referenced after the ``build``
-        method is called, so that 
+        The section context list below will contain a list of the final contexts that will be used by the builder
+        to assemble the newsletter after all sections have been added. It may also be referenced after the ``build``
+        method is called to see what context was used to generate each section.
         """
-        self.sections = []
+        self.section_contexts = []
+        """
+        The section html list bill be populated by rendering each section context in the ``section_contexts`` list
+        in its respective section template. One the build is complete, we'll simply join the html in this list
+        together to generate the final newsletter html. 
+        """
+        self.section_html = []
         """
         If I'm populating multiple different sections using the same base queryset, I want to be certain that I
         don't get duplicates of previous sections in later sections. This dict tracks used primary keys by queryset
@@ -168,12 +174,139 @@ class Newsletter(object):
     def add_section(self, context):
         """Register a new section with the newsletter builder.
 
-        If this section is of a particular type, we'll use that section type's default context as a basis for
-        this section (this also takes into account the default context of the overall newsletter). If it has
-        no type, then we'll use the overall newsletter's default context as a basis.
+        Everything that we need to build a section will need to be passed in the ``context`` variable. This
+        includes the following special items, which are not technically context but which will either be used
+        to generate context or to determine how the section is rendered.
+        - "type": When provided, this should contain a type key that corresponds to a section type set via
+          ``set_section_type``. We'll then use the context of this section type (which already accounts for
+          overall newsletter default context) as a basis for the final context of this section. When no type
+          is provided, we'll use overall newsletter default context as a basis.
+        - "template": Every section must have a template associated with it. This may either be a string that
+          indicates the path of a template or a Template object. In either case, we'll pop this item and render
+          the template with remaining context. Note that "template" may also be provided in the context of a
+          section type.
+        - "querysets", "methods", and "data" all correspond to lists of keys / dicts. String keys will result
+          in simple retrieval and injection of corresponding values into context under the key names. Dicts
+          allow us to provide additional information in this retrieval and control the name of the variable
+          results are injected into. In each of these cases, the key will be popped and evaluated before results
+          are injected. For sections with a "type" specified, if both a member of section's "querysets" list
+          and a member of its section type's "querysets" list evaluate to the same context variable, we'll
+          give the section-specific result priority. However, if a later list member evaluates to the same
+          variable as a previous one, the later member's value will be used. See below for how "querysets",
+          "methods", and "data" should be formatted.
 
-        calculate the final section context by combining that type's
-        context with the ``context`` provided and return the result.
+        The members of the "queryset" list mentioned above may either be keys or dicts. Where a key is provided,
+        it will simply return the base queryset with that key. Where a dict with a "key" key is provided, it
+        will begin with the corresponding base queryset, filter / reorder it, and inject it into context either
+        under the name of the key or the value specified in "as". Consider the following:
+
+        .. code-block:: python
+
+            {
+                "key": "posts",
+                "filter": {
+                    "author__is_active": 1,
+                    "publish_date__range": ["NOW - 3d12h", "NOW"]
+                },
+                "exclude": {
+                    "is_active": 0
+                },
+                "order_by": ["author__last_name", "title"],
+                "as": "recent_active_posts",
+            }
+
+        This will result in the following being set in this section's context:
+
+        .. code-block:: python
+
+            context["recent_active_posts"] = self.base_querysets["posts"].filter(
+                author__is_active=True,
+                publish_date__range=[timezone.now() - timedelta(3, 12), timezone.now()]
+            ).exclude(
+                is_active=False
+            ).order_by("author__last_name", "title")
+
+        All of this should be relatively intuitive except for the date. Whenever we're dealing with a date field
+        on the queryset model and find NOW at the start of a string, we'll replace this with the result of
+        ``timezone.now()``. If something follows after, we'll parse it using ``get_seconds_from_duration_string``,
+        the same function we use to parse strings from our cache template tag. Alternatively, instead of this
+        shortcut, we could also use "data" or "method" lists to handle dates, since these can reference methods
+        or functions that can arguments and calculate dates internally.
+
+        But why would we need this if we can just operate on the base queryset directly? As demonstrated in the
+        newsletters app of the demo project, if we limit section contexts to content that can be stored in a
+        JSONField, then we open up our newsletter to being modeled in the database, allowing staff to interact
+        with it as well as enabling devs to make immediate adjustments / fixes. We COULD in this case simply
+        register the "recent_active_posts" queryset as a base queryset and call on it via its key, but then any
+        changes we're asked to make to it will require a deploy. This ability to apply simple filters as shown
+        above enables us to register fewer and broader base querysets that can be filtered as above on a
+        per-section basis and enables us to make immediate adjustments to newsletter content.
+
+        Another option with members of "querysets" is the use of "data" in place of "key". Consider the following:
+
+        .. code-block:: python
+
+            {
+                "data": "recent_posts",
+                "order_by": "title",
+                "as": "my_posts",
+            }
+
+        Instead of looking for a key in our base querysets by the name of "recent_posts", this tells the builder
+        to look in the global DATA store using the ``get_data`` function. It's expected that this will return
+        a queryset, which we'll then reorder via "order_by" and inject into context as "my_posts". This is
+        especially useful if we already have a queryset that we're using globally and want to plug into that
+        same data. Note that if ``get_data`` does not return a queryset in this instance, we'll get an error.
+
+        On the other hand, if we include the same reference name in our "data" list, the result can be anything.
+        Suppose we have the following as our data list:
+
+        .. code-block:: python
+
+            [
+                "my_favorite_post_list",
+                {
+                    "key": "recent_posts_func",
+                    "as": "my_posts",
+                },
+                {
+                    "key": "recent_posts_func",
+                    "args": [1, 2],
+                    "kwargs": {"days_within": 90}
+                    "as": "my_posts_with_args",
+                }
+            ]
+
+        This will retrieve ``get_data("my_favorite_post_list")``, ``get_data("recent_posts_func")``, and
+        ``get_data("recent_posts_func", 1, 2, days_within=90)`` and inject results into context as
+        "my_favorite_post_list", "my_posts", and "my_posts_with_args" respectively. These can return any kind
+        of values, including lists and dicts.
+
+        Finally, for especially complex operations that are specific to a newsletter, we can add a custom method
+        to the newsletter builder and call it via the "method" list. Consider the following:
+
+        .. code-block:: python
+
+            [
+                "get_upcoming_events",
+                {
+                    "call": "get_recent_posts",
+                    "as": "my_posts",
+                },
+                {
+                    "call": {
+                        "name": "get_recent_posts"
+                        "args": [1, 2],
+                        "kwargs": {"days_within": 90}
+                    },
+                    "as": "my_posts_with_args",
+                }
+            ]
+
+        This will save the result of "get_upcoming_events" in the "get_upcoming_events" variable, the result
+        of "get_recent_posts" with no arguments in "my_posts", and the result of "get_recent_posts" with the
+        given args and / or kwargs in "my_posts_with_args". As with "data", there are no limitations as to
+        what these methods can return.
 
         :param context: context or string type
         :return: the context of the section added

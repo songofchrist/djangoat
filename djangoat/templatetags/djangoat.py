@@ -255,6 +255,8 @@ def timedelta(date, delta_string):
     :param date: the date to which the delta should be added
     :param delta_string: a delta string, expressing the same arguments as expected by timedelta
     :return: the resultant date
+
+    # TODO consider converting this to duration strings, as used in the cache tags and elsewhere
     """
     pm = 1
     if delta_string[0] == '-':
