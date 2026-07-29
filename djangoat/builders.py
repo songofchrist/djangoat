@@ -2,9 +2,7 @@ import base64
 import json
 import requests
 
-from djangoat.utils import get_json_file_contents
-
-
+from djangoat.utils import get_json_file_contents, get_data
 
 
 class NewsletterBuilderError(Exception):
@@ -185,81 +183,18 @@ class Newsletter(object):
           indicates the path of a template or a Template object. In either case, we'll pop this item and render
           the template with remaining context. Note that "template" may also be provided in the context of a
           section type.
-        - "querysets", "methods", and "data" all correspond to lists of keys / dicts. String keys will result
+        - "data", "methods", and "querysets" all correspond to lists of keys / dicts. String keys will result
           in simple retrieval and injection of corresponding values into context under the key names. Dicts
           allow us to provide additional information in this retrieval and control the name of the variable
           results are injected into. In each of these cases, the key will be popped and evaluated before results
-          are injected. For sections with a "type" specified, if both a member of section's "querysets" list
-          and a member of its section type's "querysets" list evaluate to the same context variable, we'll
-          give the section-specific result priority. However, if a later list member evaluates to the same
-          variable as a previous one, the later member's value will be used. See below for how "querysets",
-          "methods", and "data" should be formatted.
+          are injected. For sections with a "type" specified, if both a member of section list and a member of
+          its section type list evaluate to the same context variable, we'll give the section-specific result
+          priority. However, if a later list member evaluates to the same variable as a previous one, the later
+          member's value will be used. See below for how these lists should be formatted.
 
-        The members of the "queryset" list mentioned above may either be keys or dicts. Where a key is provided,
-        it will simply return the base queryset with that key. Where a dict with a "key" key is provided, it
-        will begin with the corresponding base queryset, filter / reorder it, and inject it into context either
-        under the name of the key or the value specified in "as". Consider the following:
-
-        .. code-block:: python
-
-            {
-                "key": "posts",
-                "filter": {
-                    "author__is_active": 1,
-                    "publish_date__range": ["NOW - 3d12h", "NOW"]
-                },
-                "exclude": {
-                    "is_active": 0
-                },
-                "order_by": ["author__last_name", "title"],
-                "as": "recent_active_posts",
-            }
-
-        This will result in the following being set in this section's context:
-
-        .. code-block:: python
-
-            context["recent_active_posts"] = self.base_querysets["posts"].filter(
-                author__is_active=True,
-                publish_date__range=[timezone.now() - timedelta(3, 12), timezone.now()]
-            ).exclude(
-                is_active=False
-            ).order_by("author__last_name", "title")
-
-        All of this should be relatively intuitive except for the date. Whenever we're dealing with a date field
-        on the queryset model and find NOW at the start of a string, we'll replace this with the result of
-        ``timezone.now()``. If something follows after, we'll parse it using ``get_seconds_from_duration_string``,
-        the same function we use to parse strings from our cache template tag. Alternatively, instead of this
-        shortcut, we could also use "data" or "method" lists to handle dates, since these can reference methods
-        or functions that can arguments and calculate dates internally.
-
-        But why would we need this if we can just operate on the base queryset directly? As demonstrated in the
-        newsletters app of the demo project, if we limit section contexts to content that can be stored in a
-        JSONField, then we open up our newsletter to being modeled in the database, allowing staff to interact
-        with it as well as enabling devs to make immediate adjustments / fixes. We COULD in this case simply
-        register the "recent_active_posts" queryset as a base queryset and call on it via its key, but then any
-        changes we're asked to make to it will require a deploy. This ability to apply simple filters as shown
-        above enables us to register fewer and broader base querysets that can be filtered as above on a
-        per-section basis and enables us to make immediate adjustments to newsletter content.
-
-        Another option with members of "querysets" is the use of "data" in place of "key". Consider the following:
-
-        .. code-block:: python
-
-            {
-                "data": "recent_posts",
-                "order_by": "title",
-                "as": "my_posts",
-            }
-
-        Instead of looking for a key in our base querysets by the name of "recent_posts", this tells the builder
-        to look in the global DATA store using the ``get_data`` function. It's expected that this will return
-        a queryset, which we'll then reorder via "order_by" and inject into context as "my_posts". This is
-        especially useful if we already have a queryset that we're using globally and want to plug into that
-        same data. Note that if ``get_data`` does not return a queryset in this instance, we'll get an error.
-
-        On the other hand, if we include the same reference name in our "data" list, the result can be anything.
-        Suppose we have the following as our data list:
+        The "data" list uses keys that correspond to members of the global DATA dict and that can be used to
+        retrieve associated data via a call to ``get_data`` and can return data of any format. List members
+        should either be keys or dicts. For example, suppose we have the following as our data list:
 
         .. code-block:: python
 
@@ -279,11 +214,15 @@ class Newsletter(object):
 
         This will retrieve ``get_data("my_favorite_post_list")``, ``get_data("recent_posts_func")``, and
         ``get_data("recent_posts_func", 1, 2, days_within=90)`` and inject results into context as
-        "my_favorite_post_list", "my_posts", and "my_posts_with_args" respectively. These can return any kind
-        of values, including lists and dicts.
+        "my_favorite_post_list", "my_posts", and "my_posts_with_args" respectively. Where the member of
+        DATA is a function, we'll execute that function, passing any args / kwargs supplied, and return
+        the result. Use of "data" in newsletters can be helpful with maintaining consistency with certain
+        kinds of data across the site.
 
-        Finally, for especially complex operations that are specific to a newsletter, we can add a custom method
-        to the newsletter builder and call it via the "method" list. Consider the following:
+        The "method" list should be used for newsletter-specific operations that are too complex to be
+        represented as a queryset within the "querysets" list and uses formatting similar to "data". These
+        methods should be attached to the newsletter builder and can then be added to the "method" list as
+        follows:
 
         .. code-block:: python
 
@@ -305,12 +244,165 @@ class Newsletter(object):
 
         This will save the result of "get_upcoming_events" in the "get_upcoming_events" variable, the result
         of "get_recent_posts" with no arguments in "my_posts", and the result of "get_recent_posts" with the
-        given args and / or kwargs in "my_posts_with_args". As with "data", there are no limitations as to
-        what these methods can return.
+        given args and kwargs in "my_posts_with_args". As with "data", there are no limitations as to what
+        these methods can return.
+
+        The "queryset" list can use one of the following to retrieve a queryset from the builder's
+        "base_queryests":
+
+        .. code-block:: python
+
+            [
+                "base_queryset_key_1",
+                {
+                    "key": "base_queryset_key_2",
+                    "as": "var_name"
+                }
+            ]
+
+        The first will return the queryset associated with the key "base_queryset_key_1" and place it in a
+        context variable by the same name, and the second will place "base_queryset_key_2" in the variable
+        "var_name". Alternatively, if the queryset that we want to retrieve is in DATA or is retrievable
+        via a builder method, we could retrieve it by one of the following:
+
+        .. code-block:: python
+
+            [
+                {
+                    "data": "data_key",
+                    "as": "data_var_name_1"
+                }
+                {
+                    "data": {
+                        "key": "data_key_to_func",
+                        "args": [1, 2],
+                        "kwargs": {"days_within": 90}
+                    },
+                    "as": "data_var_name_2"
+                },
+                {
+                    "method": "method_name",
+                    "as": "method_var_name_1"
+                }
+                {
+                    "method": {
+                        "call": "method_with_args_name",
+                        "args": [1, 2],
+                        "kwargs": {"days_within": 90}
+                    },
+                    "as": "method_var_name_2"
+                }
+            ]
+
+        Unlike the "data" and "method" lists, when we use these keys within the context of the "querysets"
+        list, they MUST return a queryset, so that we can do any basic filtering operations that we need
+        to do, as detailed below. If they return anything else, we'll get an error.
+
+        Once we have our queryset, regardless of how we retrieved it, we can do some basic, JSON-friendly
+        filtering / reordering via "filter", "exclude", and "order_by", or we can call on filter functions
+        registered to the builder. As an example of the first method, consider the following:
+
+        .. code-block:: python
+
+            {
+                "key": "posts",
+                "filters": [
+                    {
+                        "filter": {
+                            "author__is_active": 1,
+                            "publish_date__range": ["TIME:NOW - 3d12h", "TIME:NOW"]
+                        },
+                        "exclude": {
+                            "is_active": 0
+                        }
+                        "order_by": ["author__last_name", "title"],
+                    }
+                ],
+                "as": "recent_active_posts",
+            }
+
+        This will result in the following being set in this section's context:
+
+        .. code-block:: python
+
+            context["recent_active_posts"] = self.base_querysets["posts"].filter(
+                author__is_active=True,
+                publish_date__range=[timezone.now() - timedelta(3, 12), timezone.now()]
+            ).exclude(
+                is_active=False
+            ).order_by("author__last_name", "title")
+
+        All of this should be relatively intuitive except for the date. To denote the present time, we use
+        "TIME:NOW". To denote the beginning of the present day, we use "DATE:TODAY". If anything follows
+        this, it will be treated as a timedelta and may be formated in any manner allowable in the
+        ``get_seconds_from_duration_string`` utility function (which we also use to denote expiration in
+        cache template tags). We'll adjust these arguments prior to passing them to "filter" or "exclude".
+        This allows us to do basic filtering on the fly, without registering anything to the builder. The
+        reason we don't use datetime object directly is to enable the context object to be stored in a
+        JSONField in the database, as shown in the demo newsletter models.
+
+        For more complex filters, we would add whatever filter functions we need to the builder's
+        ``filter_functions`` dict (either in the init method or by updating the dict after initialization)
+        and apply those functions by referencing the associated key. For example, suppose we register the
+        above filters as a single filter function:
+
+        .. code-block:: python
+
+            builder.filter_functions["recent_active_posts_filter"] = lambda qs: qs.filter(
+                author__is_active=True,
+                publish_date__range=[timezone.now() - timedelta(3, 12), timezone.now()]
+            ).exclude(
+                is_active=False
+            ).order_by("author__last_name", "title")
+
+        With this in our code, we could apply this filter to the base "posts" queryset as follows:
+
+        .. code-block:: python
+
+            {
+                "key": "posts",
+                "filters": [
+                    "recent_active_posts_filter"
+                ],
+                "as": "recent_active_posts",
+            }
+
+        Notice "filters" here is a list, which means that we can apply multiple filter functions in whatever
+        order we like. We can also add a dict with "filter", "exclude", or "order_by" for minor adjustments.
+        Each of these filters will be applied in order and will place the resulting queryset in context in
+        "recent_active_posts". Of course, more complex filters or filters that cannot be stored in a JSONField
+        should be registered as filter functions.
+
+        As a reminder, we don't do any conflict checking. If a member of the "data" list populates "my_var" in
+        context and then a member of the "queryset" list populates the same variable, it will be overwritten.
+        The same is true for variables populated for a section type. If a member of the "data" list in a section
+        type populates a variable and then a member of the "data" list for a section that uses that type populates
+        the same variable, it will be overwritten. We will evaluate the "data" list first, then the "method" list,
+        and finally the "queryset" list for the associated section type, and then we will do the same for the
+        section. Context will contain the most recent assignments for each variable and will be passed to the
+        given template for rendering.
 
         :param context: context or string type
         :return: the context of the section added
         """
+        section_type = context.get('section_type', None)
+        default_context = self.section_types.get(section_type, None) or self.default_context
+        for item in default_context.get('data', []) + context.pop('data', []):  # process data list members
+            if isinstance(item, str):  # use the key as the variable name
+                context[item] = get_data(item)
+            else:
+                try:
+                    item_key = item['key']
+                except KeyError:
+                    raise NewsletterBuilderError('Dict "data" list members must provide a value for "key".')
+                item_as = item.get('as', None)
+                context[item_as or item_key] = get_data(
+                    item_key,
+                    *item.get('args', []),
+                    *item.get('kwargs', {}),
+                )
+
+
 
 
     def build(self, preview=False):
@@ -547,6 +639,7 @@ class Newsletter(object):
         suppose we do the following:
 
         ..  code-block:: python
+
             builder.set_section_type('dual_column_posts', DUAL_COLUMN_POST_CONTEXT)
             builder.set_section_type('full_width_ad', FULL_WIDTH_AD_CONTEXT)
 
@@ -554,6 +647,7 @@ class Newsletter(object):
         this type:
 
         ..  code-block:: python
+
             builder.add_section({"type": "dual_column_posts", "heading": "Trending News", . . .})
             builder.add_section({"type": "full_width_ad", . . .})
             builder.add_section({"type": "dual_column_posts", "heading": "General Awesomeness", . . .})
