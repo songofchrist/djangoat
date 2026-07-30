@@ -750,6 +750,22 @@ def get_remote_image(url, name=None, format=None, alpha=None, max_dims=None):
 
 
 def get_seconds_from_duration_string(duration):
+    """Parses a duration string and returns the number of seconds it represents.
+
+    All of the following duration strings evaluate to the same number of seconds
+    - 3d4h5m6s
+    - 3dy4hr5min6sec
+    - 3d 4h 5m 6s
+    - 3dy 4hr 5min 6sec
+    - 3 days 4 hours 5 minutes 6 seconds
+    - 3 days, 4 hours, 5 minutes, 6 seconds
+    - 3 days; 4 hours; 5 minutes; 6 seconds
+
+    You should use whatever format is most helpful in the given context.
+
+    :param duration: a string representation of duration
+    :return: the number of seconds in ``duration``
+    """
     if duration.isnumeric():
         return int(duration)
     ds = DURATION_STRING_REGEX.split(duration)[:-1]

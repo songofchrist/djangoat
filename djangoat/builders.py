@@ -1,8 +1,13 @@
 import base64
+import datetime
 import json
+import re
 import requests
 
-from djangoat.utils import get_json_file_contents, get_data
+from django.db.models import QuerySet
+from django.utils import timezone
+
+from djangoat.utils import get_json_file_contents, get_data, get_seconds_from_duration_string
 
 
 class NewsletterBuilderError(Exception):
@@ -10,6 +15,39 @@ class NewsletterBuilderError(Exception):
 
 
 
+
+# FUNCTIONS
+_DATE_FINDER = re.compile(r'(DATE:TODAY|TIME:NOW)(?: *([-+]) *(.*))?')
+def _sub_dates(v):
+    """Transforms date strings into date objects friendly to queries.
+
+    For example:
+    - DATE:TODAY
+    - TIME:NOW
+    - DATE:TODAY + 5d6h
+    - DATE:TODAY + 5d 6h
+    - TIME:NOW + 5 days 6 hours
+    - TIME:NOW + 5 days, 6 hours
+
+    :param v: any value
+    :return: the original value or a date
+    """
+    if isinstance(v, str):
+        m = _DATE_FINDER.match(v)
+        if m:  # we have a date / time string; replace this value with a timezone-aware datetime
+            now = timezone.now()
+            v = now.replace(hour=0, minute=0, second=0, microsecond=0) if m.group(1) == 'DATE:TODAY' else now
+            if m.group(3):
+                delta = datetime.timedelta(seconds=get_seconds_from_duration_string(m.group(3)))
+                v = v + delta if m.group(2) == '+' else v - delta
+    elif isinstance(v, (list, tuple)):
+        v = [_sub_dates(vi) for vi in v]
+    return v
+
+
+
+
+# CLASSES
 class Newsletter(object):
     """Aids in constructing basic section-based newsletters that will look as expected in a variety of clients.
 
@@ -63,20 +101,21 @@ class Newsletter(object):
             self.default_context.update(default_context)
         """
         ``base_querysets`` is where we define any querysets that we'll be using in the creation of the
-        newsletter. For example, we might set this to the following:
+        newsletter. For example, after the builder has been initialized, we might do the following:
 
         ..  code-block:: python
-
-            {
+        
+            builder.base_querysets.update({
                 'recent_events': Event.objects.filter(start_date__range=(30_DAYS_AGO, NOW)),
                 'near_events': Event.objects.filter(start_date__range=(NOW, 30_DAYS_FROM_NOW)),
                 'far_events': Event.objects.filter(start_date__gt=30_DAYS_FROM_NOW),
-            }
+            })
 
-        Note that we've not limited these querysets to only X items, since we may reuse them from one section to
-        the next and may want varying numbers of items in each. These are BASE QUERYSETS meant to be filtered and
-        limited as we add each section. For example, when adding a section, we might add the following to that
-        section's ``context``:
+        Now all of these querysets will be available to our sections when requested via section context. Note
+        that we've not limited these querysets to only X items, as we'll want them available for reuse from one
+        section to the next, each of which may call for varying numbers of items. These are BASE QUERYSETS meant
+        to be filtered and limited as we add and then render each section. For example, when adding a section,
+        we might add the following to its context:
 
         .. code-block:: python
 
@@ -99,16 +138,20 @@ class Newsletter(object):
             }
 
         When we find "querysets" in section context, we'll remove it from context and inject whatever querysets
-        its contents require. Both of the above will start with the "far_events" queryset and build off of that.
+        its contents require. Both of the above will start with the "far_events" queryset and build off of it.
         This first will result in a context variable of "far_kids_events" and the second in a context variable
         of "far_events" (since no "as" was specified).
 
         See the ``add_section`` method for more on special context keys like "querysets" and limitations on the
         use of "filter" and "exclude" for each.
-
-        TODO in querysets, use the string dates developed for cache to denote +/- time (i.e. 'start_date': '+90d')
         """
         self.base_querysets = {}
+        """
+        A dict of filter functions that take a queryset as the first argument and any other args / kwargs
+        thereafter and that return a filtered queryset. These functions may be called upon within a dict within
+        a "querysets" list via the "filters" key. See the ``add_section`` method for more on how to use these.
+        """
+        self.filter_functions = {}
         """
         Here we have a dict of default contexts, each assigned to a unique key that we're associating with a
         type of section. These can be set via the ``set_section_type`` method. Once registered, any section
@@ -179,10 +222,16 @@ class Newsletter(object):
           ``set_section_type``. We'll then use the context of this section type (which already accounts for
           overall newsletter default context) as a basis for the final context of this section. When no type
           is provided, we'll use overall newsletter default context as a basis.
-        - "template": Every section must have a template associated with it. This may either be a string that
-          indicates the path of a template or a Template object. In either case, we'll pop this item and render
-          the template with remaining context. Note that "template" may also be provided in the context of a
-          section type.
+        - "template_path": Every section should have a template associated with it. This should be a string
+          that indicates the path to the template that will be used to render that section. A default may be
+          specified in section type context and overridden on a per-section basis.
+        - "template_string": If a template string is provided, it will take precedence over the template
+          provided in "template_path". This should only be used (1) for extremely simple, one-line, templates
+          that don't justify a separate file or (2) for a temporary override to an existing template. For
+          example, suppose we discover an error in a template just before sending out a newsletter and it
+          needs a quick fix. Rather than doing a midday deploy, if we've made a "Template" TextField as in
+          the NewsletterSection model of our newsletters demo, we can simply paste the fix here to override
+          the template. We can then deploy the fix in the code at our leisure.
         - "data", "methods", and "querysets" all correspond to lists of keys / dicts. String keys will result
           in simple retrieval and injection of corresponding values into context under the key names. Dicts
           allow us to provide additional information in this retrieval and control the name of the variable
@@ -207,7 +256,7 @@ class Newsletter(object):
                 {
                     "key": "recent_posts_func",
                     "args": [1, 2],
-                    "kwargs": {"days_within": 90}
+                    "kwargs": {"days_within": 90},
                     "as": "my_posts_with_args",
                 }
             ]
@@ -219,9 +268,9 @@ class Newsletter(object):
         the result. Use of "data" in newsletters can be helpful with maintaining consistency with certain
         kinds of data across the site.
 
-        The "method" list should be used for newsletter-specific operations that are too complex to be
+        The "methods" list should be used for newsletter-specific operations that are too complex to be
         represented as a queryset within the "querysets" list and uses formatting similar to "data". These
-        methods should be attached to the newsletter builder and can then be added to the "method" list as
+        methods should be attached to the newsletter builder and can then be added to the "methods" list as
         follows:
 
         .. code-block:: python
@@ -233,11 +282,9 @@ class Newsletter(object):
                     "as": "my_posts",
                 },
                 {
-                    "call": {
-                        "name": "get_recent_posts"
-                        "args": [1, 2],
-                        "kwargs": {"days_within": 90}
-                    },
+                    "call": "get_recent_posts",
+                    "args": [1, 2],
+                    "kwargs": {"days_within": 90},
                     "as": "my_posts_with_args",
                 }
             ]
@@ -247,7 +294,7 @@ class Newsletter(object):
         given args and kwargs in "my_posts_with_args". As with "data", there are no limitations as to what
         these methods can return.
 
-        The "queryset" list can use one of the following to retrieve a queryset from the builder's
+        The "querysets" list can use one of the following to retrieve a queryset from the builder's
         "base_queryests":
 
         .. code-block:: python
@@ -343,7 +390,7 @@ class Newsletter(object):
 
         For more complex filters, we would add whatever filter functions we need to the builder's
         ``filter_functions`` dict (either in the init method or by updating the dict after initialization)
-        and apply those functions by referencing the associated key. For example, suppose we register the
+        and apply those functions by referencing the associated keys. For example, suppose we register the
         above filters as a single filter function:
 
         .. code-block:: python
@@ -355,14 +402,26 @@ class Newsletter(object):
                 is_active=False
             ).order_by("author__last_name", "title")
 
-        With this in our code, we could apply this filter to the base "posts" queryset as follows:
+        With this in our code, we could apply this filter to the base "posts" queryset, as well as two
+        additional filters, as follows:
 
         .. code-block:: python
 
             {
                 "key": "posts",
                 "filters": [
-                    "recent_active_posts_filter"
+                    "recent_active_posts_filter",
+                    {
+                        "call": "another_filter_func",
+                        "args": [1, 2],
+                        "kwargs": {"days_within": 90}
+                    },
+                    {
+                        filter: {
+                            "is_awesome": 1
+                        },
+                        "order_by": "title"
+                    }
                 ],
                 "as": "recent_active_posts",
             }
@@ -374,11 +433,11 @@ class Newsletter(object):
         should be registered as filter functions.
 
         As a reminder, we don't do any conflict checking. If a member of the "data" list populates "my_var" in
-        context and then a member of the "queryset" list populates the same variable, it will be overwritten.
+        context and then a member of the "querysets" list populates the same variable, it will be overwritten.
         The same is true for variables populated for a section type. If a member of the "data" list in a section
         type populates a variable and then a member of the "data" list for a section that uses that type populates
-        the same variable, it will be overwritten. We will evaluate the "data" list first, then the "method" list,
-        and finally the "queryset" list for the associated section type, and then we will do the same for the
+        the same variable, it will be overwritten. We will evaluate the "data" list first, then the "methods" list,
+        and finally the "querysets" list for the associated section type, and then we will do the same for the
         section. Context will contain the most recent assignments for each variable and will be passed to the
         given template for rendering.
 
@@ -386,24 +445,83 @@ class Newsletter(object):
         :return: the context of the section added
         """
         section_type = context.get('section_type', None)
-        default_context = self.section_types.get(section_type, None) or self.default_context
-        for item in default_context.get('data', []) + context.pop('data', []):  # process data list members
+        default_context = {**(self.section_types.get(section_type, None) or self.default_context)}
+        for item in default_context.pop('data', []) + context.pop('data', []):  # process data list members
             if isinstance(item, str):  # use the key as the variable name
                 context[item] = get_data(item)
             else:
                 try:
-                    item_key = item['key']
+                    data_key = item['key']
                 except KeyError:
                     raise NewsletterBuilderError('Dict "data" list members must provide a value for "key".')
-                item_as = item.get('as', None)
-                context[item_as or item_key] = get_data(
-                    item_key,
+                context[item.get('as', None) or data_key] = get_data(
+                    data_key,
                     *item.get('args', []),
-                    *item.get('kwargs', {}),
+                    **item.get('kwargs', {}),
                 )
-
-
-
+        for item in default_context.pop('methods', []) + context.pop('methods', []):  # process methods list members
+            if isinstance(item, str):  # use the method name as the variable name
+                context[item] = getattr(self, item)()
+            else:
+                try:
+                    method_name = item['call']
+                except KeyError:
+                    raise NewsletterBuilderError('Dict "methods" list members must provide a value for "call".')
+                context[item.get('as', None) or method_name] = getattr(self, method_name)(
+                    *item.get('args', []),
+                    **item.get('kwargs', {}),
+                )
+        for item in default_context.pop('querysets', []) + context.pop('querysets', []):  # process querysets list members
+            if isinstance(item, str):  # use the base queryset name as the variable name
+                context[item] = self.base_querysets[item]
+            else:
+                key = item.get('key', None)
+                if key:  # get the queryset from base_querysets
+                    qs = self.base_querysets[key]
+                else:
+                    data = item.get('data', None)
+                    if data:  # get the queryset from the DATA dict
+                        if isinstance(data, str):
+                            qs = get_data(data)
+                        else:
+                            qs = get_data(data['key'], *data.get('args', []), **data.get('kwargs', {}))
+                        if not isinstance(qs, QuerySet):
+                            raise NewsletterBuilderError('The value returned by "data" must be a Queryset; it'
+                                                         f' returned a {qs.__class__.__name__} instance.')
+                    else:
+                        method = item.get('method', None)
+                        if method:  # get the queryset from a builder method
+                            if isinstance(method, str):
+                                qs = getattr(self, method)()
+                            else:
+                                qs = getattr(self, method['call'])(*method.get('args', []), **method.get('kwargs', {}))
+                            if not isinstance(qs, QuerySet):
+                                raise NewsletterBuilderError('The value returned by "method" must be a Queryset; it'
+                                                             f' returned a {qs.__class__.__name__} instance.')
+                        else:
+                            raise NewsletterBuilderError('Dict "querysets" list members must either have a "key"'
+                                                         ' value (indicating a base queryset), a "data" value'
+                                                         ' (indicating a value in DATA), or a "method" (indicating'
+                                                         ' a builder method).')
+                for f in item.get('filters', []):
+                    if isinstance(f, str):  # a filter function with no args / kwargs
+                        qs = self.filter_functions[f](qs)
+                    else:
+                        func = f.get('call', None)
+                        if func:  # a filter function with args / kwargs
+                            qs = self.filter_functions[func](qs, *f.get('args', []), **f.get('kwargs', {}))
+                        else:  # a dict of "filter", "exclude", and "order_by" for on-the-fly filtering
+                            fltr = f.get('filter', None)
+                            if fltr:
+                                qs = qs.filter(**{k: _sub_dates(v) for k, v in fltr.items()})
+                            excl = f.get('exclude', None)
+                            if excl:
+                                qs = qs.filter(**{k: _sub_dates(v) for k, v in excl.items()})
+                            ob = f.get('order_by', None)
+                            if ob:
+                                qs = qs.order_by(*([ob] if isinstance(ob, str) else ob))
+                context[item.get('as', None) or key] = qs
+        self.section_contexts.append({**default_context, **context})  # our final context for this section
 
     def build(self, preview=False):
         """Generate newsletter html and other related values.
