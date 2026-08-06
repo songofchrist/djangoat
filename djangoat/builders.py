@@ -7,6 +7,7 @@ import requests
 from django.db.models import QuerySet
 from django.utils import timezone
 
+from djangoat import DATA
 from djangoat.utils import get_json_file_contents, get_data, get_seconds_from_duration_string
 
 
@@ -172,6 +173,7 @@ class Newsletter(object):
         together to generate the final newsletter html. 
         """
         self.section_html = []
+        self.section_index = 0  # tracks the index sections as they're added; use as the key of none is provided
         """
         If I'm populating multiple different sections using the same base queryset, I want to be certain that I
         don't get duplicates of previous sections in later sections. This dict tracks used primary keys by queryset
@@ -218,34 +220,69 @@ class Newsletter(object):
         Everything that we need to build a section will need to be passed in the ``context`` variable. This
         includes the following special items, which are not technically context but which will either be used
         to generate context or to determine how the section is rendered.
+        - "key": When provided, this should contain a key that is unique to the current section and that
+          can be used to identify it, such as when we have an error. Note that "key" will be removed from
+          context and replaced by "section_key".
         - "type": When provided, this should contain a type key that corresponds to a section type set via
           ``set_section_type``. We'll then use the context of this section type (which already accounts for
           overall newsletter default context) as a basis for the final context of this section. When no type
-          is provided, we'll use overall newsletter default context as a basis.
+          is provided, we'll use overall newsletter default context as a basis. Note that "type" will be
+          removed from context and replaced by "section_type".
         - "template_path": Every section should have a template associated with it. This should be a string
           that indicates the path to the template that will be used to render that section. A default may be
           specified in section type context and overridden on a per-section basis.
         - "template_string": If a template string is provided, it will take precedence over the template
           provided in "template_path". This should only be used (1) for extremely simple, one-line, templates
           that don't justify a separate file or (2) for a temporary override to an existing template. For
-          example, suppose we discover an error in a template just before sending out a newsletter and it
+          example, suppose we discover an error in a template just before sending out a newsletter, and it
           needs a quick fix. Rather than doing a midday deploy, if we've made a "Template" TextField as in
-          the NewsletterSection model of our newsletters demo, we can simply paste the fix here to override
-          the template. We can then deploy the fix in the code at our leisure.
-        - "data", "methods", and "querysets" all correspond to lists of keys / dicts. String keys will result
-          in simple retrieval and injection of corresponding values into context under the key names. Dicts
-          allow us to provide additional information in this retrieval and control the name of the variable
-          results are injected into. In each of these cases, the key will be popped and evaluated before results
-          are injected. For sections with a "type" specified, if both a member of section list and a member of
-          its section type list evaluate to the same context variable, we'll give the section-specific result
-          priority. However, if a later list member evaluates to the same variable as a previous one, the later
-          member's value will be used. See below for how these lists should be formatted.
+          the NewsletterSection model of our newsletters demo, we can simply paste the fix here to set the
+          "template_string" and override the template. We can then deploy the fix in the code at our leisure.
+        - "imports": When provided, this will serve as the bridge between code and context, allowing us to
+          inject querysets and other values into context. It contains a list of keys / dicts, each of which,
+          depending on its contents, will import a queryset from the builder's "base_querysets" dict, a value
+          from the DATA dict or execution of a DATA dict function, or a value from the execution of a builder
+          method. Resulting values will be injected into context and "imports" will be removed. Imports
+          registered to a section type will be executed first, then those registered to a particular section.
+          Any values that evaluate to the same variable as a previously resolved variable will be overwritten.
+          See below for examples of imports and what they do.
 
-        The "data" list uses keys that correspond to members of the global DATA dict and that can be used to
-        retrieve associated data via a call to ``get_data`` and can return data of any format. List members
-        should either be keys or dicts. For example, suppose we have the following as our data list:
+        The following is a sample context. Pay particular attention to the various options availavle in the
+        "imports" item:
 
         .. code-block:: python
+
+            {
+                "key": "unique_section_key",                            # any unique key
+                "type": "predefined_post_section_type",                 # see "set_section_type"
+                "template_path": "newsletters/two_column_post.html"     # we'll render this with resulting context
+                "template_string": "TEMPORARY OVERRIDE TEXT"            # rendered in place of the "two_column_post"
+                "imports": [
+                    "key",                                              # retrieve builder.base_querysets["key"], get_data("key"), or builder.key()
+                    {
+                        "queryset": "active_posts",                     # retrieve builder.base_querysets["active_posts"]
+                        "filters": [
+                            {                                           # a free-form, basic filter for "active_posts"
+                                "filter": {
+                                    "genre__in": ["fiction", "fantasy"],
+                                    "is_for_kids": 1
+                                },
+                                "exclude": {
+                                    "minimum_age__gte": 13
+                                },
+                                "order_by": "minimum_age"
+                            }
+                        ],
+                        "limit": 3,                                     # default to a limit of 3 posts
+                        "as": "pre_teen_fiction_fantasy"                # the name for this queryset in context
+                    }
+
+
+
+
+                ],
+                "random_var": 123                                       # just a standard context variable
+            }
 
             [
                 "my_favorite_post_list",
@@ -441,87 +478,78 @@ class Newsletter(object):
         section. Context will contain the most recent assignments for each variable and will be passed to the
         given template for rendering.
 
+        Once we have our querysets in context, we may want to combine these into a prearranged order
+
         :param context: context or string type
         :return: the context of the section added
         """
-        section_type = context.get('section_type', None)
+        context['section_index'] = self.section_index
+        section_key = context['section_key'] = context.pop('key', self.section_index)
+        section_type = context['section_type'] = context.pop('type', None)
+        id_text = f'(SECTION: key={section_key}), type={section_type}, imports_index=%d)'  # on error, helps us id the section
         default_context = {**(self.section_types.get(section_type, None) or self.default_context)}
-        for item in default_context.pop('data', []) + context.pop('data', []):  # process data list members
-            if isinstance(item, str):  # use the key as the variable name
-                context[item] = get_data(item)
-            else:
-                try:
-                    data_key = item['key']
-                except KeyError:
-                    raise NewsletterBuilderError('Dict "data" list members must provide a value for "key".')
-                context[item.get('as', None) or data_key] = get_data(
-                    data_key,
-                    *item.get('args', []),
-                    **item.get('kwargs', {}),
-                )
-        for item in default_context.pop('methods', []) + context.pop('methods', []):  # process methods list members
-            if isinstance(item, str):  # use the method name as the variable name
-                context[item] = getattr(self, item)()
-            else:
-                try:
-                    method_name = item['call']
-                except KeyError:
-                    raise NewsletterBuilderError('Dict "methods" list members must provide a value for "call".')
-                context[item.get('as', None) or method_name] = getattr(self, method_name)(
-                    *item.get('args', []),
-                    **item.get('kwargs', {}),
-                )
-        for item in default_context.pop('querysets', []) + context.pop('querysets', []):  # process querysets list members
-            if isinstance(item, str):  # use the base queryset name as the variable name
-                context[item] = self.base_querysets[item]
-            else:
-                key = item.get('key', None)
-                if key:  # get the queryset from base_querysets
-                    qs = self.base_querysets[key]
+        for i, item in enumerate(default_context.pop('imports', []) + context.pop('imports', [])):
+            if isinstance(item, str):
+                if item in self.base_querysets:  # check for a base queryset with this key
+                    context[item] = self.base_querysets[item]
+                elif item in DATA:  # next try the DATA dict
+                    context[item] = get_data(item)
+                elif hasattr(self, item):  # finally try a method
+                    context[item] = getattr(self, item)()
                 else:
-                    data = item.get('data', None)
-                    if data:  # get the queryset from the DATA dict
-                        if isinstance(data, str):
-                            qs = get_data(data)
-                        else:
-                            qs = get_data(data['key'], *data.get('args', []), **data.get('kwargs', {}))
-                        if not isinstance(qs, QuerySet):
-                            raise NewsletterBuilderError('The value returned by "data" must be a Queryset; it'
-                                                         f' returned a {qs.__class__.__name__} instance.')
+                    raise NewsletterBuilderError(f'The key "{item}" does not correspond to any base queryset, DATA,'
+                                                 f' value, or builder method {id_text % i}.')
+            else:  # we have a dict
+                key = item.get('queryset', None)
+                if key:  # check for a base queryset with this key
+                    if key in self.base_querysets:
+                        value = self.base_querysets[key]
                     else:
-                        method = item.get('method', None)
-                        if method:  # get the queryset from a builder method
-                            if isinstance(method, str):
-                                qs = getattr(self, method)()
+                        raise NewsletterBuilderError(f'The base querysets dict has no key "{key}" {id_text % i}.')
+                else:
+                    key = item.get('data', None)
+                    if key:  # next try the DATA dict
+                        if key in DATA:
+                            value = get_data(key, *item.get('args', []), **item.get('kwargs', {}))
+                        else:
+                            raise NewsletterBuilderError(f'The DATA dict has no key "{key}" {id_text % i}.')
+                    else:
+                        key = item.get('method', None)
+                        if key:  # finally try a method
+                            if hasattr(self, item):
+                                value = getattr(self, key)(*item.get('args', []), **item.get('kwargs', {}))
                             else:
-                                qs = getattr(self, method['call'])(*method.get('args', []), **method.get('kwargs', {}))
-                            if not isinstance(qs, QuerySet):
-                                raise NewsletterBuilderError('The value returned by "method" must be a Queryset; it'
-                                                             f' returned a {qs.__class__.__name__} instance.')
+                                raise NewsletterBuilderError(f'The newsletter builder has no "{key}" method {id_text % i}.')
                         else:
-                            raise NewsletterBuilderError('Dict "querysets" list members must either have a "key"'
-                                                         ' value (indicating a base queryset), a "data" value'
-                                                         ' (indicating a value in DATA), or a "method" (indicating'
-                                                         ' a builder method).')
-                for f in item.get('filters', []):
-                    if isinstance(f, str):  # a filter function with no args / kwargs
-                        qs = self.filter_functions[f](qs)
-                    else:
-                        func = f.get('call', None)
-                        if func:  # a filter function with args / kwargs
-                            qs = self.filter_functions[func](qs, *f.get('args', []), **f.get('kwargs', {}))
-                        else:  # a dict of "filter", "exclude", and "order_by" for on-the-fly filtering
-                            fltr = f.get('filter', None)
-                            if fltr:
-                                qs = qs.filter(**{k: _sub_dates(v) for k, v in fltr.items()})
-                            excl = f.get('exclude', None)
-                            if excl:
-                                qs = qs.filter(**{k: _sub_dates(v) for k, v in excl.items()})
-                            ob = f.get('order_by', None)
-                            if ob:
-                                qs = qs.order_by(*([ob] if isinstance(ob, str) else ob))
-                context[item.get('as', None) or key] = qs
+                            raise NewsletterBuilderError('This import dict failed to supply a "queryset", "data",'
+                                                         f' or "method" from which to import a value {id_text % i}.')
+                if isinstance(value, QuerySet):
+                    filters = item.get('filters', None)
+                    if filters:
+                        for f in filters:
+                            if isinstance(f, str):  # a filter function with no args / kwargs
+                                value = self.filter_functions[f](value)
+                            else:
+                                func = f.get('func', None)
+                                if func:  # a filter function with args / kwargs
+                                    value = self.filter_functions[func](value, *f.get('args', []), **f.get('kwargs', {}))
+                                else:  # a dict of "filter", "exclude", and "order_by" for basic, on-the-fly filtering
+                                    fltr = f.get('filter', None)
+                                    if fltr:
+                                        value = value.filter(**{k: _sub_dates(v) for k, v in fltr.items()})
+                                    excl = f.get('exclude', None)
+                                    if excl:
+                                        value = value.filter(**{k: _sub_dates(v) for k, v in excl.items()})
+                                    ob = f.get('order_by', None)
+                                    if ob:
+                                        value = value.order_by(*([ob] if isinstance(ob, str) else ob))
+                    limit = item.get('limit', None)
+                    if limit:  # apply the limit now, but record it in case we need to reference it elsewhere
+                        value = value[:int(limit)]
+                        value.dg_builder_limit = int(limit)
+                context[item.get('as', None) or key] = value
         self.section_contexts.append({**default_context, **context})  # our final context for this section
+        self.section_index += 1
 
     def build(self, preview=False):
         """Generate newsletter html and other related values.
@@ -773,7 +801,7 @@ class Newsletter(object):
         :param key: a unique key that identifies this section type
         :param default_context: the default context for this type of section
         """
-        for k in ('type',):
+        for k in ('key', 'type',):
             if k in default_context:
                 raise NewsletterBuilderError(f'The "{k}" key is not allowed in default section type'
                                              ' context; it may only be used with sections.')

@@ -17,15 +17,12 @@ class RecordNode(template.Node):
         builder = context['builder']  # a reference to our newsletter builder instance
         objs = self.objs.resolve(context)
         if isinstance(objs, QuerySet):
-            is_queryset = True
-            if objs.query.high_mark:
-                raise TemplateSyntaxError('The "record" tag only accepts unsliced querysets. The queryset'
-                                          f' "{self.objs}" has already been sliced and should be therefore be'
-                                          ' passed as an instance list instead')
+            objs = objs.all()  # ensure any prior slices / cached records are removed
             used_pks = builder.used_item_pks_by_model_class.get(objs.model.__name__, None)
-            if used_pks:
+            if used_pks:  # exclude previously used instances
                 objs = objs.exclude(pk__in=used_pks)
-            objs = list(objs[:self.limit.resolve(context) or 10])
+            limit = (self.limit.resolve(context) if self.limit else None) or objs.dg_builder_limit
+            objs = list(objs[:limit])  # retrieve X unused instances from this queryset
         if not isinstance(objs, (list, tuple)):  # assume we have a single instance
             objs = [objs]
         for obj in objs:
@@ -36,8 +33,7 @@ class RecordNode(template.Node):
             })
             section_records['ALL'].append(obj)  # tracks all instances in the order they were added
             section_records.setdefault(model, set()).add(obj)  # tracks by instance model
-        if is_queryset:  # make the instances that we recorded available in context
-            context['recorded_' + self.objs] = objs
+        context['recorded_' + self.objs] = objs  # make recorded items available in context
         return ''
 
 @register.tag
@@ -67,13 +63,11 @@ def record(parser, token):
     When recording and retrieving a queryset, we'll perform some additional steps that ensure we end up with
     unique material for each section. These are as follows:
     - Exclude any previously used instances of this queryset's model from the resulting queryset.
-    - Limit the resulting queryset to MAX_DISPLAY instances (10 if not provided).
+    - Limit the resulting queryset to MAX_DISPLAY instances (defaults to the "limit" set when importing or 10).
     - Record instances in the resulting queryset as described above.
-    - Inject the resulting queryset into context as "recorded_QUERYSET_NAME".
+    - Inject the resulting queryset into context as "recorded_QUERYSET_NAME", so that the queryset can be reused.
 
-    Because we only impose limits on querysets and mark their instances as used as we render a section template,
-    we're able to reuse the queryset as many times as we need to retrieve unique contents. For example, consider
-    the following:
+    A single queryset might be reused within a section as follows:
 
     ..  code-block:: django
         {% record my_posts 2 %}  # retrieve 2 items from the "my_posts" queryset
@@ -86,18 +80,24 @@ def record(parser, token):
             <div class="title">{{ post.title }}</div>
         {% endfor %}
 
+    Because the first call to the record tag registers the first two posts in the queryset as used, even though
+    we pass in the same queryset on the second call, those first two posts will be automatically excluded. This
+    allows us to reuse this queryset as many times as we want, while getting unique results with each new call.
+    Note that we use "recorded_my_posts" when rendering our display, as "my_posts" is still the original
+    queryset.
+
     As with instance lists, because all items returned in the resulting queryset are marked as used, any logic that
     might cause one or more to not be displayed should be executed PRIOR to using this tag to ensure that records
     match rendered content.
 
     Note that if we intentionally want to insert a previously used instance further down in the newsletter, we'll
-    want to use one of the first two methods, as these are rendered as-is and do not account for previously used
-    items.
+    want to use one of the first two methods (INSTANCE / ISNTANCE_LIST), as these are rendered as-is and do not
+    account for previously used items.
     """
     #queryset.query.high_mark = None until sliced, use to determine if limit has been applied; if not, apply a default limit of 10.
     bits = token.split_contents()[1:]
     if len(bits) > 2:
         raise TemplateSyntaxError('This tag should take one of the following forms: {%% record INSTANCE %%},'
-                                  ' {%% record INSTANCE_LIST %%}, or {%% record QUERYSET MAX_DISPLAY %%};'
+                                  ' {%% record INSTANCE_LIST %%}, or {%% record QUERYSET [MAX_DISPLAY] %%};'
                                   ' you entered {%% %s %%}' % token.contents)
     return RecordNode(parser.compile_filter(bits[0]), parser.compile_filter(bits[1]) if len(bits) else None)
