@@ -2,18 +2,64 @@ from django import template
 from django.db.models.query import QuerySet
 from django.template.base import TemplateSyntaxError
 
+from djangoat.builders import NewsletterBuilderError
+
 register = template.Library()
 
 
 
 
+@register.filter
+def record(items, limit=None):
+    dgr = items.getattr('dg_record', None)
+    if not dgr:
+        raise NewsletterBuilderError(f'The items ')
+
+
+
+
 class RecordNode(template.Node):
+    """
+    TODO write a filter version of this
+    The only reason I went ith the tag version is to make context available, so everything can be recorded on
+    the builder.
+
+    INSTEAD
+
+    Add attribute "dg_newsletters" dict whenever an object / queryset is retrieved. This is a dict of the following
+    form:
+
+    {
+        "builder": BUILDER,
+        "section_key": KEY,
+        "limit": LIMIT,
+        . . .
+    }
+
+    In this way everything that a record filter will need to work will be included in the object passed in.
+
+    instance|record (record instance)
+    item_list|record (record all instances in list)
+    queryset|record (record all instances in queryset)
+    queryset|record:3 (record first 3 instances in queryset)
+
+    NOTE: to make this work with lists, we'll need to create a list subclass as follows:
+
+    class NewsletterBuilderList(list):
+        def __init__(self, *args, description=None):
+            super().__init__(*args)
+            self.dg_newsletters = {}
+
+    For everything in our imports, if we get back a list (or tuple) we'll transform it into an instance of the
+    above. This will allow us to attach the necessary dict data, so that when it is passed in to the record filter
+    The filter has what it needs from the object itself to register everything and retrieve the correct number of
+    items.
+    """
     def __init__(self, objs, limit):
         self.objs = objs
         self.limit = limit
 
     def render(self, context):
-        is_queryset = False
         builder = context['builder']  # a reference to our newsletter builder instance
         objs = self.objs.resolve(context)
         if isinstance(objs, QuerySet):
@@ -37,7 +83,7 @@ class RecordNode(template.Node):
         return ''
 
 @register.tag
-def record(parser, token):
+def old_record(parser, token):
     """
     This tag will take one of the following formats:
 

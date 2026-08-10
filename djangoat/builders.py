@@ -2,9 +2,13 @@ import base64
 import datetime
 import json
 import re
+
 import requests
 
+from django.apps import apps
 from django.db.models import QuerySet
+from django.template import Context, Template
+from django.template.loader import render_to_string
 from django.utils import timezone
 
 from djangoat import DATA
@@ -49,6 +53,17 @@ def _sub_dates(v):
 
 
 # CLASSES
+class _NewsletterList(list):
+    """
+    By turning standard lists, tuples, and sets into an instance of this class, we enable "record" to be
+    attached. This dict contains info that the "record" tag will need to keep track of the items therein.
+    """
+    def __init__(self, *args, record):
+        super().__init__(*args)
+        self.dg_record = record
+
+
+
 class Newsletter(object):
     """Aids in constructing basic section-based newsletters that will look as expected in a variety of clients.
 
@@ -231,13 +246,13 @@ class Newsletter(object):
         - "template_path": Every section should have a template associated with it. This should be a string
           that indicates the path to the template that will be used to render that section. A default may be
           specified in section type context and overridden on a per-section basis.
-        - "template_string": If a template string is provided, it will take precedence over the template
-          provided in "template_path". This should only be used (1) for extremely simple, one-line, templates
-          that don't justify a separate file or (2) for a temporary override to an existing template. For
-          example, suppose we discover an error in a template just before sending out a newsletter, and it
-          needs a quick fix. Rather than doing a midday deploy, if we've made a "Template" TextField as in
-          the NewsletterSection model of our newsletters demo, we can simply paste the fix here to set the
-          "template_string" and override the template. We can then deploy the fix in the code at our leisure.
+        - "template": If a template is provided, it will take precedence over the template at "template_path".
+          This should only be used (1) for extremely simple, one-line, templates that don't justify a separate
+          file or (2) for a temporary override to an existing template. For example, suppose we discover an
+          error in a template just before sending out a newsletter, and it needs a quick fix. Rather than
+          doing a midday deploy, if we've made a "Template" TextField as in the NewsletterSection model of our
+          newsletters demo, we can simply paste the fix here to set the "template" and override the template.
+          We can then deploy the fix in the code at our leisure.
         - "imports": When provided, this will serve as the bridge between code and context, allowing us to
           inject querysets and other values into context. It contains a list of keys / dicts, each of which,
           depending on its contents, will import a queryset from the builder's "base_querysets" dict, a value
@@ -247,7 +262,7 @@ class Newsletter(object):
           Any values that evaluate to the same variable as a previously resolved variable will be overwritten.
           See below for examples of imports and what they do.
 
-        The following is a sample context. Pay particular attention to the various options availavle in the
+        The following is a sample context. Pay particular attention to the various options available in the
         "imports" item:
 
         .. code-block:: python
@@ -255,136 +270,86 @@ class Newsletter(object):
             {
                 "key": "unique_section_key",                            # any unique key
                 "type": "predefined_post_section_type",                 # see "set_section_type"
+                "template": "TEMPORARY OVERRIDE TEMPLATE"               # rendered in place of the "two_column_post"
                 "template_path": "newsletters/two_column_post.html"     # we'll render this with resulting context
-                "template_string": "TEMPORARY OVERRIDE TEXT"            # rendered in place of the "two_column_post"
                 "imports": [
                     "key",                                              # retrieve builder.base_querysets["key"], get_data("key"), or builder.key()
                     {
+                        "queryset": "active_posts",                     # retrieve builder.base_querysets["active_posts"] as "active_posts"
+                    },
+                    {
                         "queryset": "active_posts",                     # retrieve builder.base_querysets["active_posts"]
-                        "filters": [
-                            {                                           # a free-form, basic filter for "active_posts"
-                                "filter": {
+                        "as": "my_active_posts"                         # place the result in "my_active_posts"
+                    },
+                    {
+                        "data": "active_posts"                          # retrieve get_data("active_posts") as "active_posts"
+                    },
+                    {
+                        "data": "active_posts",                         # retrieve get_data("active_posts")
+                        "as": "my_active_posts"                         # place the result in "my_active_posts"
+                    },
+                    {
+                        "data": "active_posts",                         # retrieve get_data("active_posts", *args, **kwargs)
+                        "args": [1, 2],
+                        "kwargs": {"one": 1, "two": 2}
+                    },
+                    {
+                        "method": "get_active_posts"                    # retrieve builder.get_active_posts() as "get_active_posts"
+                    },
+                    {
+                        "method": "get_active_posts",                   # retrieve builder.get_active_posts()
+                        "as": "my_active_posts"                         # place the result in "my_active_posts"
+                    },
+                    {
+                        "method": "get_active_posts",                   # retrieve builder.get_active_posts(*args, **kwargs)
+                        "args": [1, 2],
+                        "kwargs": {"one": 1, "two": 2},
+                        "as": "my_active_posts"                         # place the result in "my_active_posts"
+                    },
+                    {
+                        "queryset": "active_posts",                     # or "data" or "method"
+                        "refine": [                                     # functions / filter dicts by which to refine the retrieved value
+                            "function_no_args",                         # queryset = builder.refine_functions["function_no_args"](queryset)
+                            {
+                                "call": "function_with_args",           # queryset = builder.refine_functions["function_with_args"](queryset, *args, **kwargs)
+                                "args": [1, 2],
+                                "kwargs": {"one": 1, "two": 2}
+                            },
+                            {                                           # a free-form, basic filter dict; retrieved / refined value must be a Queryset
+                                "filter": {                             # queryset = queryset.filter(genre__in=["fiction", "fantasy"], is_for_teens=1)
                                     "genre__in": ["fiction", "fantasy"],
-                                    "is_for_kids": 1
-                                },
-                                "exclude": {
-                                    "minimum_age__gte": 13
-                                },
-                                "order_by": "minimum_age"
+                                    "is_for_teens": 1
+                                }
+                                "exclude": {                            # queryset = queryset.exclude(Q(target_age__lt=5) | Q(target_age__gt=13), is_boring=1)
+                                    "Q": [{
+                                        "target_age__lt": 13
+                                    }, {
+                                        "target_age__gt": 19
+                                    }],
+                                    "is_boring": 1
+                                }
                             }
                         ],
+                        "order_by": "minimum_age",                      # either a field or a list of fields; retrieved / refined value must be a Queryset
                         "limit": 3,                                     # default to a limit of 3 posts
+                        "post_process": "method"                        # queryset / list = builder.method(queryset)
                         "as": "pre_teen_fiction_fantasy"                # the name for this queryset in context
                     }
-
-
-
-
                 ],
                 "random_var": 123                                       # just a standard context variable
             }
 
-            [
-                "my_favorite_post_list",
-                {
-                    "key": "recent_posts_func",
-                    "as": "my_posts",
-                },
-                {
-                    "key": "recent_posts_func",
-                    "args": [1, 2],
-                    "kwargs": {"days_within": 90},
-                    "as": "my_posts_with_args",
-                }
-            ]
+        Two notes regarding the final member of "imports".
+        - Whenever initial retrieval results in a queryset, that queryset may be refined, either by passing
+          the queryset to functions registered to ``builder.refine_functions`` or by specifying basic filters
+          or excludes as shown above.
+        - The "post_process" method, when specified will be the final things to execute before the resulting
+          value is injected into context. Any filtering should have been done prior to this point. This method
+          should contain any final prep before display (i.e. annotations, interactions with other database
+          records, etc.)
 
-        This will retrieve ``get_data("my_favorite_post_list")``, ``get_data("recent_posts_func")``, and
-        ``get_data("recent_posts_func", 1, 2, days_within=90)`` and inject results into context as
-        "my_favorite_post_list", "my_posts", and "my_posts_with_args" respectively. Where the member of
-        DATA is a function, we'll execute that function, passing any args / kwargs supplied, and return
-        the result. Use of "data" in newsletters can be helpful with maintaining consistency with certain
-        kinds of data across the site.
 
-        The "methods" list should be used for newsletter-specific operations that are too complex to be
-        represented as a queryset within the "querysets" list and uses formatting similar to "data". These
-        methods should be attached to the newsletter builder and can then be added to the "methods" list as
-        follows:
 
-        .. code-block:: python
-
-            [
-                "get_upcoming_events",
-                {
-                    "call": "get_recent_posts",
-                    "as": "my_posts",
-                },
-                {
-                    "call": "get_recent_posts",
-                    "args": [1, 2],
-                    "kwargs": {"days_within": 90},
-                    "as": "my_posts_with_args",
-                }
-            ]
-
-        This will save the result of "get_upcoming_events" in the "get_upcoming_events" variable, the result
-        of "get_recent_posts" with no arguments in "my_posts", and the result of "get_recent_posts" with the
-        given args and kwargs in "my_posts_with_args". As with "data", there are no limitations as to what
-        these methods can return.
-
-        The "querysets" list can use one of the following to retrieve a queryset from the builder's
-        "base_queryests":
-
-        .. code-block:: python
-
-            [
-                "base_queryset_key_1",
-                {
-                    "key": "base_queryset_key_2",
-                    "as": "var_name"
-                }
-            ]
-
-        The first will return the queryset associated with the key "base_queryset_key_1" and place it in a
-        context variable by the same name, and the second will place "base_queryset_key_2" in the variable
-        "var_name". Alternatively, if the queryset that we want to retrieve is in DATA or is retrievable
-        via a builder method, we could retrieve it by one of the following:
-
-        .. code-block:: python
-
-            [
-                {
-                    "data": "data_key",
-                    "as": "data_var_name_1"
-                }
-                {
-                    "data": {
-                        "key": "data_key_to_func",
-                        "args": [1, 2],
-                        "kwargs": {"days_within": 90}
-                    },
-                    "as": "data_var_name_2"
-                },
-                {
-                    "method": "method_name",
-                    "as": "method_var_name_1"
-                }
-                {
-                    "method": {
-                        "call": "method_with_args_name",
-                        "args": [1, 2],
-                        "kwargs": {"days_within": 90}
-                    },
-                    "as": "method_var_name_2"
-                }
-            ]
-
-        Unlike the "data" and "method" lists, when we use these keys within the context of the "querysets"
-        list, they MUST return a queryset, so that we can do any basic filtering operations that we need
-        to do, as detailed below. If they return anything else, we'll get an error.
-
-        Once we have our queryset, regardless of how we retrieved it, we can do some basic, JSON-friendly
-        filtering / reordering via "filter", "exclude", and "order_by", or we can call on filter functions
-        registered to the builder. As an example of the first method, consider the following:
 
         .. code-block:: python
 
@@ -425,49 +390,9 @@ class Newsletter(object):
         reason we don't use datetime object directly is to enable the context object to be stored in a
         JSONField in the database, as shown in the demo newsletter models.
 
-        For more complex filters, we would add whatever filter functions we need to the builder's
-        ``filter_functions`` dict (either in the init method or by updating the dict after initialization)
-        and apply those functions by referencing the associated keys. For example, suppose we register the
-        above filters as a single filter function:
 
-        .. code-block:: python
 
-            builder.filter_functions["recent_active_posts_filter"] = lambda qs: qs.filter(
-                author__is_active=True,
-                publish_date__range=[timezone.now() - timedelta(3, 12), timezone.now()]
-            ).exclude(
-                is_active=False
-            ).order_by("author__last_name", "title")
 
-        With this in our code, we could apply this filter to the base "posts" queryset, as well as two
-        additional filters, as follows:
-
-        .. code-block:: python
-
-            {
-                "key": "posts",
-                "filters": [
-                    "recent_active_posts_filter",
-                    {
-                        "call": "another_filter_func",
-                        "args": [1, 2],
-                        "kwargs": {"days_within": 90}
-                    },
-                    {
-                        filter: {
-                            "is_awesome": 1
-                        },
-                        "order_by": "title"
-                    }
-                ],
-                "as": "recent_active_posts",
-            }
-
-        Notice "filters" here is a list, which means that we can apply multiple filter functions in whatever
-        order we like. We can also add a dict with "filter", "exclude", or "order_by" for minor adjustments.
-        Each of these filters will be applied in order and will place the resulting queryset in context in
-        "recent_active_posts". Of course, more complex filters or filters that cannot be stored in a JSONField
-        should be registered as filter functions.
 
         As a reminder, we don't do any conflict checking. If a member of the "data" list populates "my_var" in
         context and then a member of the "querysets" list populates the same variable, it will be overwritten.
@@ -488,17 +413,23 @@ class Newsletter(object):
         section_type = context['section_type'] = context.pop('type', None)
         id_text = f'(SECTION: key={section_key}), type={section_type}, imports_index=%d)'  # on error, helps us id the section
         default_context = {**(self.section_types.get(section_type, None) or self.default_context)}
+        imported = set()
         for i, item in enumerate(default_context.pop('imports', []) + context.pop('imports', [])):
+            record = {  # for use with the "record" filter template tag
+                'builder': self,
+                'section_key': section_key,
+            }
             if isinstance(item, str):
                 if item in self.base_querysets:  # check for a base queryset with this key
-                    context[item] = self.base_querysets[item]
+                    value = self.base_querysets[item]
                 elif item in DATA:  # next try the DATA dict
-                    context[item] = get_data(item)
+                    value = get_data(item)
                 elif hasattr(self, item):  # finally try a method
-                    context[item] = getattr(self, item)()
+                    value = getattr(self, item)()
                 else:
                     raise NewsletterBuilderError(f'The key "{item}" does not correspond to any base queryset, DATA,'
                                                  f' value, or builder method {id_text % i}.')
+                as_var = item
             else:  # we have a dict
                 key = item.get('queryset', None)
                 if key:  # check for a base queryset with this key
@@ -524,31 +455,67 @@ class Newsletter(object):
                             raise NewsletterBuilderError('This import dict failed to supply a "queryset", "data",'
                                                          f' or "method" from which to import a value {id_text % i}.')
                 if isinstance(value, QuerySet):
-                    filters = item.get('filters', None)
-                    if filters:
-                        for f in filters:
-                            if isinstance(f, str):  # a filter function with no args / kwargs
-                                value = self.filter_functions[f](value)
+                    refine = item.get('refine', None)
+                    if refine:
+                        for r in refine:
+                            if isinstance(r, str):  # a filter function with no args / kwargs
+                                value = self.refine_functions[r](value)
                             else:
-                                func = f.get('func', None)
+                                func = r.get('call', None)
                                 if func:  # a filter function with args / kwargs
-                                    value = self.filter_functions[func](value, *f.get('args', []), **f.get('kwargs', {}))
-                                else:  # a dict of "filter", "exclude", and "order_by" for basic, on-the-fly filtering
-                                    fltr = f.get('filter', None)
+                                    value = self.filter_functions[func](value, *r.get('args', []), **r.get('kwargs', {}))
+                                else:  # a dict of "filter" and / or "exclude" kwargs for basic, on-the-fly filtering
+                                    fltr = r.get('filter', None)
                                     if fltr:
                                         value = value.filter(**{k: _sub_dates(v) for k, v in fltr.items()})
-                                    excl = f.get('exclude', None)
+                                    excl = r.get('exclude', None)
                                     if excl:
-                                        value = value.filter(**{k: _sub_dates(v) for k, v in excl.items()})
-                                    ob = f.get('order_by', None)
-                                    if ob:
-                                        value = value.order_by(*([ob] if isinstance(ob, str) else ob))
+                                        value = value.exclude(**{k: _sub_dates(v) for k, v in excl.items()})
+                    order_by = item.get('order_by', None)
+                    if order_by:
+                        value = value.order_by(*([order_by] if isinstance(order_by, str) else order_by))
                     limit = item.get('limit', None)
                     if limit:  # apply the limit now, but record it in case we need to reference it elsewhere
                         value = value[:int(limit)]
-                        value.dg_builder_limit = int(limit)
-                context[item.get('as', None) or key] = value
-        self.section_contexts.append({**default_context, **context})  # our final context for this section
+                        record['limit'] = int(limit)
+                as_var = item.get('as', None) or key
+            if isinstance(value, QuerySet):
+                value.dg_record = record
+            elif isinstance(value, (list, tuple, set)):
+                value = _NewsletterList(*value, record=record)
+
+            # TODO post_process here
+
+            context[as_var] = value
+            imported.add(as_var)
+        context = {**default_context, **context}
+        for k, v in context.items():  # enable iterables passed directly into context to be recorded as well
+            record = {
+                'builder': self,
+                'section_key': section_key,
+            }
+            if k not in imported and isinstance(v, (QuerySet, list, tuple, set)):
+                if isinstance(v, QuerySet):
+                    v.dg_record = record
+                else:
+                    context[k] = _NewsletterList(*v, record=record)
+
+
+
+        # TODO add a "post_process" key to items above; this will be stored alongside the limit; when provided, all this just
+
+        template = context.get('template', None)
+        if template:
+            html = Template(template).render(Context(context))
+        else:
+            template_path = context.get('template_path', None)
+            if template_path:
+                html = render_to_string(template_path, context)
+            else:
+                raise NewsletterBuilderError('Context must include a "template" or "template_path".')
+
+
+
         self.section_index += 1
 
     def build(self, preview=False):
