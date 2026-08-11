@@ -1,5 +1,5 @@
 from django import template
-from django.db.models.query import QuerySet
+from django.db import models
 from django.template.base import TemplateSyntaxError
 
 from djangoat.builders import NewsletterBuilderError
@@ -11,10 +11,41 @@ register = template.Library()
 
 @register.filter
 def record(items, limit=None):
-    dgr = items.getattr('dg_record', None)
-    if not dgr:
-        raise NewsletterBuilderError(f'The items ')
+    """Record any items received on the builder for later reference.
 
+    The primary purpose of this filter is to mark any model instances passed in as having been used, so that
+    later sections do not duplicate current section content. In addition, because we may want to track what
+    items appeared in a particular issue (i.e. to allow for rotating content between issues), we'll also
+    record which items appeared in this section on a per-model basis.
+
+    Used items will have their primary keys added to ``builder.used_item_pks_by_model_class`` on a per model
+    basis. Before recording and returning queryset results for this call, we'll automatically exclude any used
+    primary keys for this queryset's model. Or, if we've already retrieved certain content for later sections
+    and have registered those via ``builder.record_items``, those items' primary keys will already exist in this
+    dict and will therefore be excluded.
+
+    Items will also be registered to ``builder.used_items_by_section_key``, a dict wherein we'll keep a
+    per-section record of what items we've used in the newsletter. Each section will be a dict whose "ALL"
+    key contains all recorded instances and whose other keys will indicate per-model instances.
+
+    We might use this tag as follows:
+
+    ..  code-block:: django
+        {% for post in posts_qs|record %} . . . {% endfor %}            # assumes an already-sliced queryset
+        {% for post in posts_qs|record:3 %} . . . {% endfor %}          # records and returns 3 unused posts
+        {% for post in posts_list|record %} . . . {% endfor %}          # records and returns all posts in the list
+        {{ post_instance|record }}                                      # records and returns a single instance
+
+    NOTE: We only exclude used primary keys from querysets. If a single instance or a list of instances is
+    provided, this will be recorded and returned as-is and may result in duplicates. That said, if we
+    intentionally mean to include one or more items in multiple places, using single instances or lists of
+    instances is how we would accomplish this.
+
+    :param items: a model instance, queryset, or list of instances to record
+    :param limit: a maximum number of records to return from a queryset (ignored for lists)
+    :return: a model instance or list of model instances (depending on ``items``)
+    """
+    return items.dg_record['builder'].record_items(items, limit, items.dg_record['section_key'])
 
 
 

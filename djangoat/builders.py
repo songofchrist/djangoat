@@ -6,7 +6,7 @@ import re
 import requests
 
 from django.apps import apps
-from django.db.models import QuerySet
+from django.db.models import Model, Q, QuerySet
 from django.template import Context, Template
 from django.template.loader import render_to_string
 from django.utils import timezone
@@ -22,13 +22,25 @@ class NewsletterBuilderError(Exception):
 
 
 # FUNCTIONS
+def _prep_filter(value, fdict, fltr=True):
+    args = []
+    q_kwarg_dicts = fdict.pop('Q', None)
+    if q_kwarg_dicts:  # a list of Q kwarg dicts to apply
+        qarg = Q()
+        for q_kwarg_dict in q_kwarg_dicts:
+            qarg |= Q(**{k: _sub_dates(v) for k, v in q_kwarg_dict.items()})
+        args.append(qarg)
+    return getattr(value, 'filter' if fltr else 'exclude')(*args, **{k: _sub_dates(v) for k, v in fdict.items()})
+
+
+
 _DATE_FINDER = re.compile(r'(DATE:TODAY|TIME:NOW)(?: *([-+]) *(.*))?')
 def _sub_dates(v):
     """Transforms date strings into date objects friendly to queries.
 
     For example:
-    - DATE:TODAY
-    - TIME:NOW
+    - DATE:TODAY (today at 0h, 0m, 0s)
+    - TIME:NOW (current time)
     - DATE:TODAY + 5d6h
     - DATE:TODAY + 5d 6h
     - TIME:NOW + 5 days 6 hours
@@ -78,6 +90,8 @@ class Newsletter(object):
 
     Read the comments on the method below for more.
     """
+    DEFAULT_QUERYSET_LIMIT = 10
+
     name = ''           # a string identifier for this newsletter
     html = ''           # the full newsletter HTML, including both HEAD (with styles) and BODY tags
     html_body = ''      # the HTML for the BODY tag (includes inlined styles but no STYLE tags)
@@ -332,21 +346,33 @@ class Newsletter(object):
                         ],
                         "order_by": "minimum_age",                      # either a field or a list of fields; retrieved / refined value must be a Queryset
                         "limit": 3,                                     # default to a limit of 3 posts
-                        "post_process": "method"                        # queryset / list = builder.method(queryset)
+                        "post_process": [
+                            "method_no_args",                           # queryset / list = builder.method_no_args(queryset)
+                            {
+                                "method": "method_with_args",           # queryset / list = builder.method_with_args(queryset, *args, **kwargs)
+                                "args": [1, 2],
+                                "kwargs": {"one": 1, "two": 2}
+                            }
+                        ]
                         "as": "pre_teen_fiction_fantasy"                # the name for this queryset in context
                     }
                 ],
                 "random_var": 123                                       # just a standard context variable
             }
 
-        Two notes regarding the final member of "imports".
+        A few notes regarding the final member of "imports".
         - Whenever initial retrieval results in a queryset, that queryset may be refined, either by passing
           the queryset to functions registered to ``builder.refine_functions`` or by specifying basic filters
-          or excludes as shown above.
-        - The "post_process" method, when specified will be the final things to execute before the resulting
-          value is injected into context. Any filtering should have been done prior to this point. This method
-          should contain any final prep before display (i.e. annotations, interactions with other database
-          records, etc.)
+          or excludes as shown above. The "refine" list will be executed on the queryset one-by-one until all
+          functions / filters / excludes have been applied.
+        - A "limit" may be set for a queryset to provide a default limit for the queryset. However, when
+          applying the `record tag`_ to a queryset within a template, a new limit may be applied if desired.
+          If no limit is supplied, we'll default to ``builder.DEFAULT_QUERYSET_LIMIT``.
+        - The "post_process" list, like the "refine_functions" list, will be executed one-by-one, taking the
+          current value and returning whatever value the named method returns. Post processing is for making
+          any final adjustments to the value to be injected into context. This value can be anything that
+          context calls for.
+
 
 
 
@@ -413,12 +439,7 @@ class Newsletter(object):
         section_type = context['section_type'] = context.pop('type', None)
         id_text = f'(SECTION: key={section_key}), type={section_type}, imports_index=%d)'  # on error, helps us id the section
         default_context = {**(self.section_types.get(section_type, None) or self.default_context)}
-        imported = set()
         for i, item in enumerate(default_context.pop('imports', []) + context.pop('imports', [])):
-            record = {  # for use with the "record" filter template tag
-                'builder': self,
-                'section_key': section_key,
-            }
             if isinstance(item, str):
                 if item in self.base_querysets:  # check for a base queryset with this key
                     value = self.base_querysets[item]
@@ -467,38 +488,39 @@ class Newsletter(object):
                                 else:  # a dict of "filter" and / or "exclude" kwargs for basic, on-the-fly filtering
                                     fltr = r.get('filter', None)
                                     if fltr:
-                                        value = value.filter(**{k: _sub_dates(v) for k, v in fltr.items()})
+                                        value = _prep_filter(value, fltr)
                                     excl = r.get('exclude', None)
                                     if excl:
-                                        value = value.exclude(**{k: _sub_dates(v) for k, v in excl.items()})
+                                        value = _prep_filter(value, excl, False)
                     order_by = item.get('order_by', None)
                     if order_by:
                         value = value.order_by(*([order_by] if isinstance(order_by, str) else order_by))
-                    limit = item.get('limit', None)
-                    if limit:  # apply the limit now, but record it in case we need to reference it elsewhere
-                        value = value[:int(limit)]
-                        record['limit'] = int(limit)
+                    value = value[:int(item.get('limit', self.DEFAULT_QUERYSET_LIMIT))]  # may be adjusted later via the "record" filter
                 as_var = item.get('as', None) or key
-            if isinstance(value, QuerySet):
-                value.dg_record = record
-            elif isinstance(value, (list, tuple, set)):
-                value = _NewsletterList(*value, record=record)
-
-            # TODO post_process here
-
+            ppms = item.get('post_process', None)
+            if ppms:
+                for ppm in ppms:  # final operations prior to injection
+                    if isinstance(ppm, str):
+                        value = getattr(self, ppm)(value)
+                    else:
+                        value = getattr(self, ppm['method'])(value, *ppm.get('args', []), **ppm.get('kwargs', {}))
             context[as_var] = value
-            imported.add(as_var)
         context = {**default_context, **context}
-        for k, v in context.items():  # enable iterables passed directly into context to be recorded as well
-            record = {
-                'builder': self,
-                'section_key': section_key,
-            }
-            if k not in imported and isinstance(v, (QuerySet, list, tuple, set)):
-                if isinstance(v, QuerySet):
-                    v.dg_record = record
-                else:
-                    context[k] = _NewsletterList(*v, record=record)
+        record = {
+            'builder': self,
+            'section_key': section_key,
+        }
+        for k, v in context.items():
+            """
+            For any queryset, list, tuple, or set of items, regardless of whether they were injected via "imports"
+            or supplied in context directly, add a "dg_record" dict with references to the builder and the section
+            key, so that, should they be passed to the "record" tag, we'll have what we need to record them in the
+            appropriate places on the builder.
+            """
+            if isinstance(v, QuerySet):
+                v.dg_record = record
+            elif isinstance(v, (list, tuple, set)):
+                context[k] = _NewsletterList(*v, record=record)
 
 
 
@@ -743,6 +765,51 @@ class Newsletter(object):
         :return: the resulting inlined HTML
         """
         return self.html
+
+    def record_items(self, items, limit=None, section_key=None):
+        """Record any items received on the builder for later reference.
+
+        This method works in coordination with the `record tag`_ to mark certain items as used and note
+        what section they occur in. Normally, we'll want to use this template tag within templates and
+        record items as we render them. But some circumstances may require us to programmatically record
+        items ahead of time.
+
+        For example, suppose we want to inject certain manually chosen items further down in the newsletter
+        and want to ensure that these items are excluded from prior sections' querysets, so as to avoid
+        duplicates. In this case, we'll need to record these items prior to adding each section via one
+        or more direct calls to this method.
+
+        NOTE: Items will only be assigned to a section if ``section_key`` is supplied. In most cases, it
+        will be easier to omit this argument when calling this method programmatically, in which case
+        items will only be marked as used, so as to be excluded from queries, but will not be assigned to
+        a section. They can then be fed into the `record tag`_ within templates, where the section key is
+        supplied automatically, to register them to a section.
+
+        :param items: a model instance, queryset, or list of instances to record
+        :param limit: a maximum number of records to return from a queryset (ignored for lists)
+        :param section_key: a key to the section in which ``items`` occurs
+        :return: a model instance or list of model instances (depending on ``items``)
+        """
+        single = False
+        if isinstance(items, QuerySet):
+            if not limit:
+                limit = items.query.high_mark or 10
+            items = items.all()  # ensure any prior slices / cached records are removed
+            used_pks = self.used_item_pks_by_model_class.get(items.model.__name__, None)
+            if used_pks:  # exclude previously used instances
+                items = items.exclude(pk__in=used_pks)
+            items = list(items[:limit])  # retrieve X unused instances from this queryset
+        elif isinstance(items, Model):  # a single model instance
+            single = True
+            items = [items]
+        for item in items:  # record items in this list
+            model = item.__class__.__name__
+            self.used_item_pks_by_model_class.setdefault(model, set()).add(item.pk)
+            if section_key:
+                section_records = self.used_items_by_section_key.setdefault(section_key, {'ALL': []})
+                section_records['ALL'].append(item)  # tracks all instances in the order they were added
+                section_records.setdefault(model, set()).add(item)  # tracks by instance model
+        return items[0] if single else items
 
     def set_section_type(self, key, default_context):
         """Sets a default context for sections with the given type key.
